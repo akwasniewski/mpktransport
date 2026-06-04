@@ -28,11 +28,15 @@ impl App {
         // shared cell so the plugin can write back to us after being consumed.
         let clicked_cell = std::rc::Rc::new(std::cell::Cell::new(Option::<usize>::None));
         let clicked_cell2 = clicked_cell.clone();
-
+        let highlighted: std::collections::HashSet<usize> = match self.route_result {
+            Some((a, b)) => [a, b].into(),
+            None => std::collections::HashSet::new(),
+        };
         let plugin = StopPlugin {
             stops: stops_data,
             pointer,
             clicked_out: clicked_cell2,
+            highlighted
         };
 
         let map_widget = Map::new(

@@ -3,16 +3,24 @@ use walkers::{HttpTiles, MapMemory, lat_lon};
 use crate::graph::Graph;
 
 #[derive(PartialEq)]
-enum Tab { Map }
+pub(super) enum Tab { Map, Routes }
 
 pub struct App {
-    pub(super) graph:Graph,
+    pub(super) graph: Graph,
     pub(super) filter: String,
     pub(super) selected: Option<usize>,
     pub(super) selected_stop_lines: Vec<String>,
     pub(super) tab: Tab,
     pub(super) tiles: HttpTiles,
     pub(super) map_memory: MapMemory,
+    // Route search state
+    pub(super) route_from: String,
+    pub(super) route_to: String,
+    pub(super) route_from_selected: Option<usize>,
+    pub(super) route_to_selected: Option<usize>,
+    pub(super) route_from_focused: bool,
+    pub(super) route_to_focused: bool,
+    pub(super) route_result: Option<(usize, usize)>, // (from_idx, to_idx)
 }
 
 impl App {
@@ -25,15 +33,24 @@ impl App {
             .unwrap_or_else(|_| map_memory.set_zoom(16.0).unwrap());
         map_memory.center_at(lat_lon(centre.0, centre.1));
 
-        Self {
-            graph,
-            filter: String::new(),
-            selected: None,
-            selected_stop_lines: Vec::new(),
-            tab: Tab::Map,
-            tiles,
-            map_memory,
-        }
+
+    Self {
+        graph,
+        filter: String::new(),
+        selected: None,
+        selected_stop_lines: Vec::new(),
+        tab: Tab::Map,
+        tiles,
+        map_memory,
+        route_from: String::new(),
+        route_to: String::new(),
+        route_from_selected: None,
+        route_to_selected: None,
+        route_from_focused: false,
+        route_to_focused: false,
+        route_result: None,
+    }
+
     }
 
     pub(super) fn visible_indices(&self) -> Vec<usize> {
@@ -68,7 +85,8 @@ impl eframe::App for App {
             });
             ui.add_space(4.0);
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.tab, Tab::Map,   "🗺  Map");
+                ui.selectable_value(&mut self.tab, Tab::Map,    "🗺  Map");
+                ui.selectable_value(&mut self.tab, Tab::Routes, "🔀  Routes");
                 ui.separator();
                 ui.label("Filter:");
                 ui.add(
@@ -90,51 +108,51 @@ impl eframe::App for App {
             ui.add_space(4.0);
         });
 
-        egui::CentralPanel::default().show_inside(ui, |ui| match self.tab {
-        Tab::Map => {
-            let mut clear_selection = false;
+    egui::CentralPanel::default().show_inside(ui, |ui| {
+    let mut clear_selection = false;
 
-            // 1. Right Side Panel
-            if let Some(idx) = self.selected {
-                // We use an explicit ID so we can clear its state later
-                let panel_id = egui::Id::new("stop_detail_panel");
+    // ── Right side panel (stop info OR route search) ─────────────────
+    let show_panel = self.selected.is_some() || self.tab == Tab::Routes;
 
-                let panel_response = egui::Panel::right(panel_id)
-                    .default_size(300.0)
-                    .resizable(true)
-                    .show_inside(ui, |ui| {
-                        egui::ScrollArea::vertical().show(ui, |ui| {
-                            self.draw_stop_panel(ui, idx);
-                        });
-                    });
+    if show_panel {
+        let panel_id = egui::Id::new("side_panel");
 
-                // Check if user dragged it closed
-                if panel_response.response.rect.width() <= 100.0 {
-                    clear_selection = true;
-                    
-                    // FIX: Force egui to delete the stored width state for this panel
-                    ui.ctx().memory_mut(|mem| {
-                        // This clears the persisted size data for this specific panel ID
-                        mem.data.remove::<egui::panel::PanelState>(panel_id);
-                    });
-                }
-            }
-
-                // Deferred state update out of layout loop
-                if clear_selection {
-                    self.selected = None;
-                    self.selected_stop_lines.clear();
-                }
-
-                // 2. Central Panel Map view
-                egui::CentralPanel::default().show_inside(ui, |ui| match self.tab {
-                    Tab::Map => {
-                        self.draw_map(ui);
+        let panel_response = egui::Panel::right(panel_id)
+            .default_size(300.0)
+            .resizable(true)
+            .show_inside(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    match self.tab {
+                        Tab::Routes => {
+                            self.draw_route_search(ui);
+                        }
+                        Tab::Map => {
+                            if let Some(idx) = self.selected {
+                                self.draw_stop_panel(ui, idx);
+                            }
+                        }
                     }
                 });
-            }
-        });
+            });
 
-        let _ = frame;
+        // Dragged closed — only matters for stop panel
+        if self.tab == Tab::Map && panel_response.response.rect.width() <= 100.0 {
+            clear_selection = true;
+            ui.ctx().memory_mut(|mem| {
+                mem.data.remove::<egui::panel::PanelState>(panel_id);
+            });
+        }
+    }
+
+    if clear_selection {
+        self.selected = None;
+        self.selected_stop_lines.clear();
+    }
+
+    // ── Map always underneath ────────────────────────────────────────
+    egui::CentralPanel::default().show_inside(ui, |ui| {
+        self.draw_map(ui);
+    });
+});        let _ = frame;
     }
 }
