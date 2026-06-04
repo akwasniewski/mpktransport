@@ -9,6 +9,7 @@ pub struct App {
     pub(super) graph:Graph,
     pub(super) filter: String,
     pub(super) selected: Option<usize>,
+    pub(super) selected_stop_lines: Vec<String>,
     pub(super) tab: Tab,
     pub(super) tiles: HttpTiles,
     pub(super) map_memory: MapMemory,
@@ -28,6 +29,7 @@ impl App {
             graph,
             filter: String::new(),
             selected: None,
+            selected_stop_lines: Vec::new(),
             tab: Tab::Map,
             tiles,
             map_memory,
@@ -54,55 +56,13 @@ impl App {
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
-
-        // ── Right detail panel ──────────────────────────────────────────────
-        egui::Panel::right("detail")
-            .resizable(true)
-            .default_size(300.0)
-            .min_size(240.0)
-            .show_inside(ui, |ui| {
-                ui.add_space(8.0);
-                ui.heading("Stop detail");
-                ui.separator();
-                match self.selected {
-                    None => {
-                        ui.add_space(12.0);
-                        ui.label(
-                            egui::RichText::new("Click a stop to inspect").italics().weak(),
-                        );
-                    }
-                    Some(idx) => {
-                        let s = &self.graph.stops[idx];
-                        let fields: &[(&str, String)] = &[
-                            ("ID",            s.stop_id.clone()),
-                            ("Code",          s.stop_code.clone()),
-                            ("Name",          s.stop_name.clone()),
-                            ("Description",   s.stop_desc.clone()),
-                            ("Latitude",      s.stop_lat.map_or("—".into(), |v| format!("{v:.6}"))),
-                            ("Longitude",     s.stop_lon.map_or("—".into(), |v| format!("{v:.6}"))),
-                            ("Zone",          s.zone_id.clone()),
-                            ("URL",           s.stop_url.clone()),
-                            ("Location type", s.location_type.map_or("—".into(), |v| v.to_string())),
-                            ("Parent",        s.parent_station.clone()),
-                            ("Timezone",      s.stop_timezone.clone()),
-                            ("Wheelchair",    s.wheelchair_boarding.map_or("—".into(), |v| v.to_string())),
-                            ("Platform",      s.platform_code.clone()),
-                        ];
-                        for (label, val) in fields {
-                            ui.horizontal_wrapped(|ui| {
-                                ui.label(egui::RichText::new(format!("{label}:")).strong().size(12.5));
-                                ui.label(egui::RichText::new(val.as_str()).size(12.5));
-                            });
-                        }
-                    }
-                }
-            });
+        let ctx = ui.ctx().clone();
 
         // ── Top toolbar ─────────────────────────────────────────────────────
         egui::Panel::top("toolbar").show_inside(ui, |ui| {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                ui.heading("🚌  GTFS Viewer");
+                ui.heading("🚊 MPKTransport");
                 ui.separator();
                 ui.label(egui::RichText::new(self.graph.source_dir.as_str()).small().weak());
             });
@@ -131,7 +91,48 @@ impl eframe::App for App {
         });
 
         egui::CentralPanel::default().show_inside(ui, |ui| match self.tab {
-            Tab::Map   => self.draw_map(ui),
+        Tab::Map => {
+            let mut clear_selection = false;
+
+            // 1. Right Side Panel
+            if let Some(idx) = self.selected {
+                // We use an explicit ID so we can clear its state later
+                let panel_id = egui::Id::new("stop_detail_panel");
+
+                let panel_response = egui::Panel::right(panel_id)
+                    .default_size(300.0)
+                    .resizable(true)
+                    .show_inside(ui, |ui| {
+                        egui::ScrollArea::vertical().show(ui, |ui| {
+                            self.draw_stop_panel(ui, idx);
+                        });
+                    });
+
+                // Check if user dragged it closed
+                if panel_response.response.rect.width() <= 100.0 {
+                    clear_selection = true;
+                    
+                    // FIX: Force egui to delete the stored width state for this panel
+                    ui.ctx().memory_mut(|mem| {
+                        // This clears the persisted size data for this specific panel ID
+                        mem.data.remove::<egui::panel::PanelState>(panel_id);
+                    });
+                }
+            }
+
+                // Deferred state update out of layout loop
+                if clear_selection {
+                    self.selected = None;
+                    self.selected_stop_lines.clear();
+                }
+
+                // 2. Central Panel Map view
+                egui::CentralPanel::default().show_inside(ui, |ui| match self.tab {
+                    Tab::Map => {
+                        self.draw_map(ui);
+                    }
+                });
+            }
         });
 
         let _ = frame;
