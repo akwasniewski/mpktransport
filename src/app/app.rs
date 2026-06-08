@@ -1,6 +1,6 @@
 use walkers::{HttpTiles, MapMemory, lat_lon};
 
-use crate::graph::Graph;
+use crate::{graph::Graph, raptor::Journey};
 
 #[derive(PartialEq)]
 pub(super) enum Tab { Map, Routes }
@@ -20,7 +20,7 @@ pub struct App {
     pub(super) route_to_selected: Option<usize>,
     pub(super) route_from_focused: bool,
     pub(super) route_to_focused: bool,
-    pub(super) route_result: Option<(usize, usize)>, // (from_idx, to_idx)
+    pub(super) route_result: Option<(usize, usize, Option<Journey>)>,
 }
 
 impl App {

@@ -1,4 +1,4 @@
-use crate::{app::app::App, raptor::Raptor};
+use crate::{app::app::App, raptor::{self, Journey, Raptor}};
 
 impl App {
     pub(super) fn draw_route_search(&mut self, ui: &mut egui::Ui) {
@@ -176,11 +176,8 @@ impl App {
                     let to = &self.graph.stops[self.route_to_selected.unwrap()].stop_id;
 
                     let mut raptor = Raptor::new(&self.graph);
-                    raptor.query(from, to, 0);
-                    self.route_result = Some((
-                        self.route_from_selected.unwrap(),
-                        self.route_to_selected.unwrap(),
-                    ));
+                    let journey = raptor.query(from, to, 8 * 3600);
+                    self.route_result = Some((self.route_from_selected.unwrap(), self.route_to_selected.unwrap(), journey));
             }
         });
 
@@ -202,20 +199,33 @@ impl App {
         ui.label(egui::RichText::new("Results").strong());
         ui.add_space(6.0);
 
-        match self.route_result {
+        match &self.route_result {
             None => {
                 ui.label(egui::RichText::new("No route searched yet.").weak().italics());
             }
-            Some((from, to)) => {
-                ui.label(egui::RichText::new(format!(
-                    "From: {}",
-                    self.graph.stops[from].stop_id
-                )).monospace());
-                ui.label(egui::RichText::new(format!(
-                    "To:   {}",
-                    self.graph.stops[to].stop_id
-                )).monospace());
+            Some((from, to, journey)) => {
+                let from_id = &self.graph.stops[*from].stop_id;
+                let to_id   = &self.graph.stops[*to].stop_id;
+                ui.label(egui::RichText::new(format!("From: {}", from_id)).monospace());
+                ui.label(egui::RichText::new(format!("To:   {}", to_id)).monospace());
+
+                match journey {
+                    Some(j) => {
+                        ui.label(egui::RichText::new("Route found").weak().italics());
+                        for (i, leg) in j.legs.iter().enumerate() {
+                            ui.label(
+                                egui::RichText::new(format!("{:>2}. {} at {}", i + 1, leg.1, leg.0))
+                                    .monospace(),
+                            );
+                        }
+                    }
+                    None => {
+                        ui.label(egui::RichText::new("No route found").weak().italics());
+                    }
+                }
             }
         }
     }
 }
+
+

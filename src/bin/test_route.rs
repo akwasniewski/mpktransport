@@ -4,7 +4,7 @@ use std::path::Path;
 use mpktransport::graph::Graph;
 use mpktransport::raptor::{Raptor, Secs};
 
-fn fmt_time(secs: Secs) -> String {
+pub fn fmt_time(secs: Secs) -> String {
     format!("{:02}:{:02}", secs / 3600, (secs % 3600) / 60)
 }
 
