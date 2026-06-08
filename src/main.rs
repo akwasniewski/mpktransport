@@ -6,6 +6,7 @@ use crate::{app::app::App, graph::Graph};
 
 mod graph;
 mod app;
+mod raptor;
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
@@ -34,7 +35,7 @@ fn main() -> Result<()> {
     eframe::run_native(
         "GTFS Viewer",
         options,
-        Box::new(|cc| Ok(Box::new(App::new(graph, cc.egui_ctx.clone())))), 
+        Box::new(|cc| Ok(Box::new(App::new(graph, cc.egui_ctx.clone())))),
     )
     .map_err(|e| anyhow::anyhow!("eframe error: {e}"))?;
 

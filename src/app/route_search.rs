@@ -1,5 +1,4 @@
-use crate::app::app::App;
-
+use crate::{app::app::App, raptor::Raptor};
 
 impl App {
     pub(super) fn draw_route_search(&mut self, ui: &mut egui::Ui) {
@@ -172,11 +171,16 @@ impl App {
                     egui::Button::new(egui::RichText::new("🔍  Find Route").strong()),
                 )
                 .clicked()
-            {
-                self.route_result = Some((
-                    self.route_from_selected.unwrap(),
-                    self.route_to_selected.unwrap(),
-                ));
+                {
+                    let from = &self.graph.stops[self.route_from_selected.unwrap()].stop_id;
+                    let to = &self.graph.stops[self.route_to_selected.unwrap()].stop_id;
+
+                    let mut raptor = Raptor::new(&self.graph);
+                    raptor.query(from, to, 0);
+                    self.route_result = Some((
+                        self.route_from_selected.unwrap(),
+                        self.route_to_selected.unwrap(),
+                    ));
             }
         });
 

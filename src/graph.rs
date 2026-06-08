@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use egui::ahash::HashMap;
 use serde::Deserialize;
-use std::{env, path::Path};
+use std::{path::Path};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Stop {
@@ -83,10 +83,17 @@ pub struct Graph {
     pub stops_by_id: HashMap<String, usize>,
     pub routes_by_id: HashMap<String, usize>,
     pub trips_by_id: HashMap<String, usize>,
+    pub trips_by_route: HashMap<String, Vec<usize>>,
 
-    pub stop_times_by_trip: HashMap<String, Vec<usize>>,
+    pub stop_times_by_trip: HashMap<String, Vec<StopTime>>,
     pub stop_times_by_stop: HashMap<String, Vec<usize>>,
-}
+
+    /// (route_id, direction_id) → stop indices (into `stops`), in stop_sequence order
+    pub stops_by_route: HashMap<(String, usize), Vec<usize>>,
+
+    /// (trip_id, stop_id) → (arrival_secs, departure_secs), pre-parsed for O(1) lookup
+    pub times_at: HashMap<String, HashMap<String, (u32, u32)>>,
+    }
 
 impl Graph {
     pub fn load(dir: &Path) -> Result<Self> {
@@ -131,6 +138,14 @@ impl Graph {
             .map(|(i, t)| (t.trip_id.clone(), i))
             .collect();
 
+        self.trips_by_route.clear();
+        for (i, t) in self.trips.iter().enumerate() {
+            self.trips_by_route
+                .entry(t.route_id.clone())
+                .or_default()
+                .push(i);
+        }
+
         self.stop_times_by_trip.clear();
         self.stop_times_by_stop.clear();
 
@@ -138,13 +153,59 @@ impl Graph {
             self.stop_times_by_trip
                 .entry(st.trip_id.clone())
                 .or_default()
-                .push(i);
+                .push(st.clone());
 
             self.stop_times_by_stop
                 .entry(st.stop_id.clone())
                 .or_default()
                 .push(i);
         }
+
+        // Pre-sort by stop_sequence so callers get ordered stops for free.
+        for stop_times in self.stop_times_by_trip.values_mut() {
+            stop_times.sort_by_key(|st| st.stop_sequence);
+        }
+
+        // Build stops_by_trip, stops_by_route and times_at from the now-sorted stop_times_by_trip.
+        self.stops_by_route.clear();
+        self.times_at.clear();
+        for (trip_id, sts) in &self.stop_times_by_trip {
+            let stop_idxs: Vec<usize> = sts
+                .iter()
+                .filter_map(|st| self.stops_by_id.get(&st.stop_id).copied())
+                .collect();
+
+            if let Some(&trip_idx) = self.trips_by_id.get(trip_id) {
+                let trip = &self.trips[trip_idx];
+                let direction = trip.direction_id.unwrap_or(0) as usize;
+                let key = (trip.route_id.clone(), direction);
+                self.stops_by_route.entry(key)
+                    .and_modify(|existing| {
+                        if stop_idxs.len() > existing.len() {
+                            *existing = stop_idxs.clone();
+                        }
+                    })
+                    .or_insert(stop_idxs);
+            }
+
+            let by_stop = sts
+                .iter()
+                .filter_map(|st| {
+                    let arr = parse_time(&st.arrival_time)?;
+                    let dep = parse_time(&st.departure_time)?;
+                    Some((st.stop_id.clone(), (arr, dep)))
+                })
+                .collect();
+            self.times_at.insert(trip_id.clone(), by_stop);
+        }
+    }
+
+    pub fn arrival_at(&self, trip_id: &str, stop_id: &str) -> Option<u32> {
+        self.times_at.get(trip_id)?.get(stop_id).map(|&(arr, _)| arr)
+    }
+
+    pub fn departure_at(&self, trip_id: &str, stop_id: &str) -> Option<u32> {
+        self.times_at.get(trip_id)?.get(stop_id).map(|&(_, dep)| dep)
     }
 
     pub fn centre(&self) -> Option<(f64, f64)> {
@@ -164,6 +225,16 @@ impl Graph {
             coords.iter().map(|c| c.1).sum::<f64>() / n,
         ))
     }
+}
+
+/// Parse a GTFS time string ("HH:MM:SS", hours may exceed 23) into seconds since midnight.
+/// Returns `None` if the string is malformed.
+pub fn parse_time(s: &str) -> Option<u32> {
+    let mut parts = s.splitn(3, ':');
+    let h: u32 = parts.next()?.parse().ok()?;
+    let m: u32 = parts.next()?.parse().ok()?;
+    let sec: u32 = parts.next()?.parse().ok()?;
+    Some(h * 3600 + m * 60 + sec)
 }
 
 fn load_csv<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<Vec<T>> {
