@@ -19,12 +19,12 @@ fn main() -> Result<()> {
     // let to = "stop_191_7719";
 
     let mut raptor = Raptor::new(&graph);
-    match raptor.query(&from, &to, departure) {
+    match raptor.query(from, to, departure) {
         Some(j) => {
             println!("Arrive: {}", fmt_time(j.arrival));
             println!("Path ({} stops):", j.legs.len());
             for (i, stop) in j.legs.iter().enumerate() {
-                println!("  {:>2}. {} at {}", i + 1, stop.1, fmt_time(stop.0));
+                println!("  {:>2}. {} at {}", i + 1, stop.stop_name, fmt_time(stop.time));
             }
         }
         None => println!("No route found."),
