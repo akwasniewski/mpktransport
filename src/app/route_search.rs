@@ -201,26 +201,132 @@ impl App {
 
         match &self.route_result {
             None => {
-                ui.label(egui::RichText::new("No route searched yet.").weak().italics());
+                ui.vertical_centered(|ui| {
+                    ui.add_space(10.0);
+                    ui.label(egui::RichText::new("No route searched yet.").weak().italics());
+                });
             }
             Some((from, to, journey)) => {
-                let from_id = &self.graph.stops[*from].stop_id;
-                let to_id   = &self.graph.stops[*to].stop_id;
-                ui.label(egui::RichText::new(format!("From: {}", from_id)).monospace());
-                ui.label(egui::RichText::new(format!("To:   {}", to_id)).monospace());
+                let from_name = &self.graph.stops[*from].stop_name;
+                let to_name = &self.graph.stops[*to].stop_name;
 
+                // --- Header ---
+                ui.group(|ui| {
+                    egui::Grid::new("route_header_grid")
+                        .num_columns(2)
+                        .spacing([8.0, 4.0])
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new("From:").weak());
+                            ui.label(egui::RichText::new(from_name).strong());
+                            ui.end_row();
+
+                            ui.label(egui::RichText::new("To:").weak());
+                            ui.label(egui::RichText::new(to_name).strong());
+                            ui.end_row();
+                        });
+                });
+
+                ui.add_space(8.0);
+
+                // --- Journey Segments ---
                 match journey {
                     Some(j) => {
-                        ui.label(egui::RichText::new("Route found").weak().italics());
-                        for (i, leg) in j.legs.iter().enumerate() {
-                            ui.label(
-                                egui::RichText::new(format!("{:>2}. {} at {}", i + 1, leg.1, fmt_time(leg.0)))
-                                    .monospace(),
-                            );
-                        }
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("Route Found").color(egui::Color32::from_rgb(100, 200, 100)).strong());
+                            ui.separator();
+                            ui.label(egui::RichText::new(format!("Arriving at {}", fmt_time(j.arrival))).weak());
+                        });
+                        
+                        ui.add_space(5.0);
+                        ui.separator();
+                        ui.add_space(5.0);
+
+                        egui::ScrollArea::vertical()
+                            .id_source("journey_legs_scroll")
+                            .show(ui, |ui| {
+                                // We iterate through windows of 2 to get (departure_stop, arrival_stop) pairs
+                                let mut legs_iter = j.legs.windows(2).enumerate().peekable();
+                                
+                                while let Some((idx, pair)) = legs_iter.next() {
+                                    let start_leg = &pair[0];
+                                    let end_leg = &pair[1];
+                                    
+                                    // Calculate travel duration for this specific segment
+                                    let duration_secs = end_leg.time.saturating_sub(start_leg.time);
+                                    let duration_mins = duration_secs / 60; 
+
+                                    // --- Render the Sub-journey Segment Card ---
+                                    ui.group(|ui| {
+                                        ui.set_width(ui.available_width()); // Span full width of side panel
+                                        
+                                        // Line Badge & Heading info
+                                        ui.horizontal(|ui| {
+                                            let line_badge = egui::RichText::new(format!(" {} ", start_leg.route_name))
+                                                .background_color(ui.visuals().widgets.active.bg_fill)
+                                                .color(ui.visuals().widgets.active.text_color())
+                                                .strong();
+                                            ui.label(line_badge);
+                                            ui.label(egui::RichText::new(&start_leg.route_headline).weak().italics());
+                                            
+                                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                ui.label(egui::RichText::new(format!("{} min", duration_mins)).weak().small());
+                                            });
+                                        });
+                                        
+                                        ui.add_space(4.0);
+
+                                        // Departure row
+                                        ui.horizontal(|ui| {
+                                            ui.label(egui::RichText::new(format!("• {}", fmt_time(start_leg.time))).monospace().weak());
+                                            ui.label(&start_leg.stop_name);
+                                        });
+
+                                        // Arrival row
+                                        ui.horizontal(|ui| {
+                                            ui.label(egui::RichText::new(format!("• {}", fmt_time(end_leg.time))).monospace().weak());
+                                            ui.label(&end_leg.stop_name);
+                                        });
+                                    });
+
+                                    // --- Check and Display Changeover / Transfer Time ---
+                                    if let Some((_, next_pair)) = legs_iter.peek() {
+                                        let next_start_leg = &next_pair[0];
+                                        
+                                        // If there's time spent waiting at the current platform, or the line changes
+                                        if next_start_leg.time > end_leg.time || end_leg.route_id != next_start_leg.route_id {
+                                            let changeover_secs = next_start_leg.time.saturating_sub(end_leg.time);
+                                            let changeover_mins = changeover_secs / 60;
+
+                                            ui.add_space(4.0);
+                                            ui.horizontal(|ui| {
+                                                ui.add_space(15.0); // Indent to separate visually from cards
+                                                
+                                                // Visual alert color for transfer
+                                                let transfer_color = egui::Color32::from_rgb(230, 140, 10); 
+                                                
+                                                ui.label(egui::RichText::new("🔄").color(transfer_color));
+                                                
+                                                if end_leg.route_id != next_start_leg.route_id {
+                                                    ui.label(egui::RichText::new(format!(
+                                                        "Change lines (Wait: {} min)", changeover_mins
+                                                    )).color(transfer_color).small());
+                                                } else {
+                                                    ui.label(egui::RichText::new(format!(
+                                                        "Stay on vehicle / Wait {} min", changeover_mins
+                                                    )).weak().small());
+                                                }
+                                            });
+                                            ui.add_space(4.0);
+                                        }
+                                    }
+                                }
+                            });
                     }
                     None => {
-                        ui.label(egui::RichText::new("No route found").weak().italics());
+                        ui.vertical_centered(|ui| {
+                            ui.add_space(10.0);
+                            ui.label(egui::RichText::new("No route found").color(egui::Color32::from_rgb(200, 100, 100)));
+                        });
                     }
                 }
             }

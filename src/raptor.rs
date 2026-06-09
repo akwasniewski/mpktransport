@@ -4,8 +4,27 @@ use std::collections::{HashMap, HashSet};
 pub type Secs = u32;
 
 #[derive(Debug, Clone)]
+pub struct Leg{
+    pub time: Secs,
+    pub stop_name: String,
+    pub route_id: String,
+    pub route_headline: String,
+    pub route_name: String,
+}
+impl Leg{
+    fn new(time: Secs, stop_name: String, route_id: String) -> Self{
+        //TODO: resolve rest of the data from route_id 
+        Self{
+            time,
+            stop_name,
+            route_id,
+            route_headline: "Bronowice".to_string(),
+            route_name: "1".to_string()
+        }
+    }
+}
 pub struct Journey {
-    pub legs: Vec<(Secs, String)>,
+    pub legs: Vec<Leg>,
     pub arrival: Secs,
 }
 
@@ -158,17 +177,19 @@ impl<'a> Raptor<'a> {
             }
         };
 
-        let mut legs: Vec<(Secs, String)> = Vec::new();
+        let mut legs: Vec<Leg> = Vec::new();
         let mut current = (arrival, to_stop.to_string());
+
+        //TODO: fill the route id
         while current.1 != from_stop {
-            legs.push((current.0, stop_name(current.1.as_str())));
+            legs.push(Leg::new(current.0, stop_name(current.1.as_str()), "route_id".to_string()));
             match parent[current.1.as_str()].clone() {
                 Some(p) => current = p,
                 None => break,
             }
-            legs.push((current.0, stop_name(current.1.as_str())));
+            legs.push(Leg::new(current.0, stop_name(current.1.as_str()), "route_id".to_string()));
         }
-        legs.push((departure, stop_name(from_stop)));
+        legs.push(Leg::new(departure, stop_name(from_stop), "route_id".to_string()));
         legs.reverse();
 
         Some(Journey { legs, arrival })
