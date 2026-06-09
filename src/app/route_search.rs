@@ -285,12 +285,12 @@ impl App {
                                             ui.set_width(ui.available_width());
                                             
                                             ui.horizontal(|ui| {
-                                                let line_badge = egui::RichText::new(format!(" {} ", start_leg.route_name))
+                                                let line_badge = egui::RichText::new(format!(" {} ", start_leg.clone().route_name.unwrap_or("Unknown route".to_string())))
                                                     .background_color(ui.visuals().widgets.active.bg_fill)
                                                     .color(ui.visuals().widgets.active.text_color())
                                                     .strong();
                                                 ui.label(line_badge);
-                                                ui.label(egui::RichText::new(&start_leg.route_headline).weak().italics());
+                                                ui.label(egui::RichText::new(start_leg.clone().trip_headline.unwrap_or("Unknown direction".to_string())).weak().italics());
                                                 
                                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                                     ui.label(egui::RichText::new(format!("{} min", duration_mins)).weak().small());
@@ -315,7 +315,7 @@ impl App {
                                     if let Some((_, next_pair)) = legs_iter.peek() {
                                         let next_start_leg = &next_pair[0];
                                         
-                                        if next_start_leg.time > end_leg.time || end_leg.route_id != next_start_leg.route_id {
+                                        if next_start_leg.time > end_leg.time || end_leg.trip_idx != next_start_leg.trip_idx {
                                             let changeover_secs = next_start_leg.time.saturating_sub(end_leg.time);
                                             let changeover_mins = changeover_secs / 60;
 
