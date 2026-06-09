@@ -1,13 +1,7 @@
-use anyhow::{Context, Result};
-use eframe::egui;
 use std::{env, path::Path};
 
-use crate::{app::app::App, graph::Graph};
-
-mod graph;
-mod app;
-mod raptor;
-mod utils;
+use anyhow::{Context, Result};
+use mpktransport::{app::App, graph::Graph};
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();

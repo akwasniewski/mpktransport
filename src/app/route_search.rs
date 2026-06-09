@@ -1,4 +1,4 @@
-use crate::{app::app::App, raptor::{self, Journey, Raptor}, utils::fmt_time};
+use crate::{app::App, raptor::{self, Journey, Raptor}, utils::fmt_time};
 
 impl App {
     pub(super) fn draw_route_search(&mut self, ui: &mut egui::Ui) {

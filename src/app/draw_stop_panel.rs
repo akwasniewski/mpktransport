@@ -1,4 +1,4 @@
-use crate::app::app::App;
+use crate::app::App;
 
 impl App {
     pub fn draw_stop_panel(&self, ui: &mut egui::Ui, idx: usize) {

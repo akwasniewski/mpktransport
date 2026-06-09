@@ -1,10 +1,6 @@
 use crate::graph::{parse_time, Graph, StopTime, Trip, Stop};
-use crate::app::app::App;
-
 use std::cmp::min;
-
 use std::collections::{HashMap, HashSet};
-
 pub type Secs = u32;
 
 #[derive(Debug, Clone)]

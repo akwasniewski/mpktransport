@@ -1,6 +1,6 @@
 use walkers::{Map, lat_lon};
 
-use crate::app::{app::App, stop_plugin::StopPlugin};
+use crate::app::{App, stop_plugin::StopPlugin};
 
 impl App {
     pub(super) fn draw_map(&mut self, ui: &mut egui::Ui) {
