@@ -7,15 +7,17 @@ pub type Secs = u32;
 #[derive(Debug, Clone)]
 pub struct Leg{
     pub time: Secs,
+    pub stop_idx: usize,
     pub stop_name: String,
     pub trip_idx: Option<usize>,
     pub trip_headline: Option<String>,
     pub route_name: Option<String>
 }
 impl Leg{
-    fn first(time: Secs, stop_name: String, trip_idx: usize, trip_headline: String, route_name: String) -> Self{
+    fn first(time: Secs, stop_idx: usize, stop_name: String, trip_idx: usize, trip_headline: String, route_name: String) -> Self{
         Self{
             time,
+            stop_idx,
             stop_name,
             trip_idx: Some(trip_idx),
             trip_headline: Some(trip_headline),
@@ -23,9 +25,10 @@ impl Leg{
         }
     }
 
-    fn second(time: Secs, stop_name: String) -> Self{
+    fn second(time: Secs, stop_idx: usize, stop_name: String) -> Self{
         Self{
             time,
+            stop_idx,
             stop_name,
             trip_idx: None,
             trip_headline: None,
@@ -192,18 +195,30 @@ impl<'a> Raptor<'a> {
 
         //TODO: fill the route id
         while current.1 != from_stop {
+            let stop_idx = self.graph.stops_by_id.get(current.1.as_str()).unwrap();
+            if let Some(trip_idx) = self.graph.trips_by_id.get(current.2.as_str()) && let Some(route_idx) = self.graph.routes_by_id.get(&self.graph.trips[*trip_idx].route_id)
+            {
+                legs.push(Leg::first(current.0, *stop_idx, stop_name(current.1.as_str()), *trip_idx, self.graph.trips[*trip_idx].trip_headsign.clone(), self.graph.routes[*route_idx].route_short_name.clone()));
+            }
+            else{
+                legs.push(Leg::second(current.0, *stop_idx, stop_name(current.1.as_str())));
+            }
             match parent[current.1.as_str()].clone() {
                 Some(p) => current = p,
                 None => break,
             }
-            if let Some(trip_idx) = self.graph.trips_by_id.get(current.2.as_str()) && let Some(route_idx) = self.graph.routes_by_id.get(&self.graph.trips[*trip_idx].route_id) {
-                legs.push(Leg::first(current.0, stop_name(current.1.as_str()), *trip_idx, self.graph.trips[*trip_idx].trip_headsign.clone(), self.graph.routes[*route_idx].route_short_name.clone()));
+            let stop_idx = self.graph.stops_by_id.get(current.1.as_str()).unwrap();
+            if let Some(trip_idx) = self.graph.trips_by_id.get(current.2.as_str()) && let Some(route_idx) = self.graph.routes_by_id.get(&self.graph.trips[*trip_idx].route_id)
+            {
+                legs.push(Leg::first(current.0, *stop_idx, stop_name(current.1.as_str()), *trip_idx, self.graph.trips[*trip_idx].trip_headsign.clone(), self.graph.routes[*route_idx].route_short_name.clone()));
             }
             else{
-                legs.push(Leg::second(current.0, stop_name(current.1.as_str())));
+                legs.push(Leg::second(current.0, *stop_idx, stop_name(current.1.as_str())));
             }
         }
-        legs.push(Leg::second(departure, stop_name(from_stop)));
+
+        let stop_idx = self.graph.stops_by_id.get(from_stop).unwrap();
+        legs.push(Leg::second(departure, *stop_idx, stop_name(from_stop)));
         legs.reverse();
 
         Some(Journey { legs, arrival })

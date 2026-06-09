@@ -346,6 +346,80 @@ impl App {
             }
         }
     }
+
+    pub fn get_active_route_shapes(&self) -> Vec<Vec<(f64, f64)>> {
+        let mut paths = Vec::new();
+
+        if let Some((_, _, Some(journey))) = &self.route_result {
+            // We iterate through windows of 2 to catch the boarding and alighting stop pairs
+            for pair in journey.legs.windows(2) {
+                let start_leg = &pair[0];
+                let end_leg = &pair[1];
+
+                // Only draw vehicle path segments (ignore walking transfers where trip_idx is None)
+                if let Some(trip_idx) = start_leg.trip_idx {
+                    if let Some(trip) = self.graph.trips.get(trip_idx) {
+                        if !trip.shape_id.is_empty() {
+                            if let Some(full_shape) = self.graph.shapes_by_id.get(&trip.shape_id) {
+                                
+                                // Fetch coordinates directly via your graph's stop index vectors
+                                let start_stop = self.graph.stops.get(start_leg.stop_idx)
+                                    .and_then(|s| Some((s.stop_lat?, s.stop_lon?)));
+                                
+                                let end_stop = self.graph.stops.get(end_leg.stop_idx)
+                                    .and_then(|s| Some((s.stop_lat?, s.stop_lon?)));
+
+                                if let (Some(start_coord), Some(end_coord)) = (start_stop, end_stop) {
+                                    if let Some(trimmed) = trim_shape_to_stops(full_shape, start_coord, end_coord) {
+                                        paths.push(trimmed);
+                                    }
+                                } else {
+                                    // Fallback: Add full shape if coordinates can't be fetched
+                                    paths.push(full_shape.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        paths
+    }
 }
 
+/// Finds the closest coordinates in the shape point array to the stops and slices them.
+fn trim_shape_to_stops(shape: &[(f64, f64)], start: (f64, f64), end: (f64, f64)) -> Option<Vec<(f64, f64)>> {
+    if shape.is_empty() { return None; }
 
+    let mut closest_start_idx = 0;
+    let mut closest_end_idx = 0;
+    let mut min_start_dist = f64::MAX;
+    let mut min_end_dist = f64::MAX;
+
+    let dist_sq = |p1: (f64, f64), p2: (f64, f64)| {
+        (p1.0 - p2.0).powi(2) + (p1.1 - p2.1).powi(2)
+    };
+
+    for (i, &pt) in shape.iter().enumerate() {
+        let d_start = dist_sq(pt, start);
+        if d_start < min_start_dist {
+            min_start_dist = d_start;
+            closest_start_idx = i;
+        }
+
+        let d_end = dist_sq(pt, end);
+        if d_end < min_end_dist {
+            min_end_dist = d_end;
+            closest_end_idx = i;
+        }
+    }
+
+    // Maintain correct slice order range bounds
+    let (from, to) = if closest_start_idx <= closest_end_idx {
+        (closest_start_idx, closest_end_idx)
+    } else {
+        (closest_end_idx, closest_start_idx)
+    };
+
+    Some(shape[from..=to].to_vec())
+}
