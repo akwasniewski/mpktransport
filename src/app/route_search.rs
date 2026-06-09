@@ -1,4 +1,4 @@
-use crate::{app::app::App, raptor::{self, Journey, Raptor}};
+use crate::{app::app::App, raptor::{self, Journey, Raptor}, utils::fmt_time};
 
 impl App {
     pub(super) fn draw_route_search(&mut self, ui: &mut egui::Ui) {
@@ -214,7 +214,7 @@ impl App {
                         ui.label(egui::RichText::new("Route found").weak().italics());
                         for (i, leg) in j.legs.iter().enumerate() {
                             ui.label(
-                                egui::RichText::new(format!("{:>2}. {} at {}", i + 1, leg.1, leg.0))
+                                egui::RichText::new(format!("{:>2}. {} at {}", i + 1, leg.1, fmt_time(leg.0)))
                                     .monospace(),
                             );
                         }

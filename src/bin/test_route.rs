@@ -1,12 +1,9 @@
 use anyhow::{Context, Result};
+use mpktransport::utils::fmt_time;
 use std::path::Path;
 
 use mpktransport::graph::Graph;
 use mpktransport::raptor::{Raptor, Secs};
-
-pub fn fmt_time(secs: Secs) -> String {
-    format!("{:02}:{:02}", secs / 3600, (secs % 3600) / 60)
-}
 
 fn main() -> Result<()> {
     let graph = Graph::load(Path::new("data/GTFS_KRK_T"))

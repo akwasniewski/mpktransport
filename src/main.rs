@@ -7,6 +7,7 @@ use crate::{app::app::App, graph::Graph};
 mod graph;
 mod app;
 mod raptor;
+mod utils;
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
