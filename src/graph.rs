@@ -1,247 +1,384 @@
 use anyhow::{Context, Result};
 use egui::ahash::HashMap;
 use serde::Deserialize;
-use std::{path::Path};
+use std::path::Path;
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct ShapePoint {
-    pub shape_id: String,
-    pub shape_pt_lat: f64,
-    pub shape_pt_lon: f64,
-    pub shape_pt_sequence: u32,
+#[derive(Debug, Deserialize)]
+struct RawShapePoint {
+    shape_id: String,
+    shape_pt_lat: f64,
+    shape_pt_lon: f64,
+    shape_pt_sequence: u32,
     #[serde(default)]
-    pub shape_dist_traveled: Option<f64>,
+    shape_dist_traveled: Option<f64>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Deserialize)]
+struct RawStop {
+    stop_id: String,
+    #[serde(default)]
+    stop_code: String,
+    #[serde(default)]
+    stop_name: String,
+    #[serde(default)]
+    stop_desc: String,
+    #[serde(default)]
+    stop_lat: Option<f64>,
+    #[serde(default)]
+    stop_lon: Option<f64>,
+    #[serde(default)]
+    zone_id: String,
+    #[serde(default)]
+    stop_url: String,
+    #[serde(default)]
+    location_type: Option<u8>,
+    #[serde(default)]
+    parent_station: String,
+    #[serde(default)]
+    stop_timezone: String,
+    #[serde(default)]
+    wheelchair_boarding: Option<u8>,
+    #[serde(default)]
+    platform_code: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawRoute {
+    route_id: String,
+    #[serde(default)]
+    agency_id: String,
+    #[serde(default)]
+    route_short_name: String,
+    #[serde(default)]
+    route_long_name: String,
+    #[serde(default)]
+    route_type: Option<u16>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawTrip {
+    route_id: String,
+    service_id: String,
+    trip_id: String,
+    #[serde(default)]
+    trip_headsign: String,
+    #[serde(default)]
+    direction_id: Option<u16>,
+    #[serde(default)]
+    shape_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawStopTime {
+    trip_id: String,
+    arrival_time: String,
+    departure_time: String,
+    stop_id: String,
+    stop_sequence: u32,
+    #[serde(default)]
+    stop_headsign: String,
+    #[serde(default)]
+    pickup_type: Option<u16>,
+    #[serde(default)]
+    drop_off_type: Option<u16>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Stop {
-    pub stop_id: String,
-    #[serde(default)]
+    pub idx: usize,
     pub stop_code: String,
-    #[serde(default)]
     pub stop_name: String,
-    #[serde(default)]
     pub stop_desc: String,
-    #[serde(default)]
     pub stop_lat: Option<f64>,
-    #[serde(default)]
     pub stop_lon: Option<f64>,
-    #[serde(default)]
     pub zone_id: String,
-    #[serde(default)]
     pub stop_url: String,
-    #[serde(default)]
     pub location_type: Option<u8>,
-    #[serde(default)]
-    pub parent_station: String,
-    #[serde(default)]
+    pub parent_station: Option<usize>,
     pub stop_timezone: String,
-    #[serde(default)]
     pub wheelchair_boarding: Option<u8>,
-    #[serde(default)]
     pub platform_code: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Route {
-    pub route_id: String,
-    #[serde(default)]
+    pub idx: usize,
     pub agency_id: String,
-    #[serde(default)]
     pub route_short_name: String,
-    #[serde(default)]
     pub route_long_name: String,
-    #[serde(default)]
     pub route_type: Option<u16>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Trip {
-    pub route_id: String,
-    pub service_id: String,
-    pub trip_id: String,
-    #[serde(default)]
+    pub idx: usize,
+    pub route_idx: usize,
+    pub service_idx: usize,
     pub trip_headsign: String,
-    #[serde(default)]
-    pub direction_id: Option<u16>,
-    #[serde(default)]
-    pub shape_id: String, 
+    pub direction_id: u16,
+    pub shape_idx: Option<usize>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+/// A single stop-visit within a trip, with times pre-parsed to seconds.
+#[derive(Debug, Clone)]
 pub struct StopTime {
-    pub trip_id: String,
-    pub arrival_time: String,
-    pub departure_time: String,
-    pub stop_id: String,
+    pub trip_idx: usize,
+    pub stop_idx: usize,
     pub stop_sequence: u32,
-    #[serde(default)]
+    pub arrival_secs: Option<u32>,
+    pub departure_secs: Option<u32>,
     pub stop_headsign: String,
-    #[serde(default)]
     pub pickup_type: Option<u16>,
-    #[serde(default)]
     pub drop_off_type: Option<u16>,
 }
+
+#[derive(Debug, Clone)]
+pub struct Shape {
+    pub points: Vec<(f64, f64)>, // (lat, lon) in shape_pt_sequence order
+}
+
+// ---------------------------------------------------------------------------
+// Graph
+// ---------------------------------------------------------------------------
 
 #[derive(Debug, Default)]
 pub struct Graph {
     pub stops: Vec<Stop>,
     pub routes: Vec<Route>,
     pub trips: Vec<Trip>,
-    pub stop_times: Vec<StopTime>,
+    pub shapes: Vec<Shape>,
+    pub services: Vec<String>,
+
     pub source_dir: String,
-    pub shapes: Vec<ShapePoint>,
-    // indexes
     pub stops_by_id: HashMap<String, usize>,
     pub routes_by_id: HashMap<String, usize>,
     pub trips_by_id: HashMap<String, usize>,
-    pub shapes_by_id: HashMap<String, Vec<(f64, f64)>>,
-    pub trips_by_route: HashMap<String, Vec<usize>>,
+    pub shapes_by_id: HashMap<String, usize>,
+    pub services_by_id: HashMap<String, usize>,
 
-    pub stop_times_by_trip: HashMap<String, Vec<StopTime>>,
-    pub stop_times_by_stop: HashMap<String, Vec<usize>>,
-
-    /// (route_id, direction_id) → stop indices (into `stops`), in stop_sequence order
-    pub stops_by_route: HashMap<(String, usize), Vec<usize>>,
-
-    /// (trip_id, stop_id) → (arrival_secs, departure_secs), pre-parsed for O(1) lookup
-    pub times_at: HashMap<String, HashMap<String, (u32, u32)>>,
-    }
+    pub trips_by_route: Vec<Vec<usize>>,
+    pub stop_times_by_trip: Vec<Vec<StopTime>>,
+    pub stop_times_by_stop: Vec<Vec<(usize, usize)>>,
+    pub stops_by_route: HashMap<(usize, usize), Vec<usize>>,
+    pub times_at: Vec<HashMap<usize, (u32, u32)>>,
+}
 
 impl Graph {
     pub fn load(dir: &Path) -> Result<Self> {
-        let stops = load_csv(&dir.join("stops.txt"))?;
-        let routes = load_csv(&dir.join("routes.txt"))?;
-        let trips = load_csv(&dir.join("trips.txt"))?;
-        let stop_times = load_csv(&dir.join("stop_times.txt"))?;
-        let shapes = load_csv(&dir.join("shapes.txt"))?;
+        let raw_stops: Vec<RawStop>         = load_csv(&dir.join("stops.txt"))?;
+        let raw_routes: Vec<RawRoute>       = load_csv(&dir.join("routes.txt"))?;
+        let raw_trips: Vec<RawTrip>         = load_csv(&dir.join("trips.txt"))?;
+        let raw_stop_times: Vec<RawStopTime> = load_csv(&dir.join("stop_times.txt"))?;
+        let raw_shapes: Vec<RawShapePoint>  = load_csv(&dir.join("shapes.txt"))?;
 
         let mut graph = Self {
-            stops,
-            routes,
-            trips,
-            stop_times,
-            shapes,
             source_dir: dir.to_string_lossy().into_owned(),
             ..Default::default()
         };
 
-        graph.build_indexes();
-
+        graph.build(raw_stops, raw_routes, raw_trips, raw_stop_times, raw_shapes);
         Ok(graph)
     }
 
-    fn build_indexes(&mut self) {
-        self.stops_by_id = self
-            .stops
+    fn build(
+        &mut self,
+        raw_stops: Vec<RawStop>,
+        raw_routes: Vec<RawRoute>,
+        raw_trips: Vec<RawTrip>,
+        raw_stop_times: Vec<RawStopTime>,
+        raw_shape_points: Vec<RawShapePoint>,
+    ) {
+        self.stops_by_id = raw_stops
             .iter()
             .enumerate()
             .map(|(i, s)| (s.stop_id.clone(), i))
             .collect();
 
-        self.routes_by_id = self
-            .routes
+        self.stops = raw_stops
+            .into_iter()
+            .enumerate()
+            .map(|(i, r)| Stop {
+                idx: i,
+                parent_station: if r.parent_station.is_empty() {
+                    None
+                } else {
+                    self.stops_by_id.get(&r.parent_station).copied()
+                },
+                stop_code: r.stop_code,
+                stop_name: r.stop_name,
+                stop_desc: r.stop_desc,
+                stop_lat: r.stop_lat,
+                stop_lon: r.stop_lon,
+                zone_id: r.zone_id,
+                stop_url: r.stop_url,
+                location_type: r.location_type,
+                stop_timezone: r.stop_timezone,
+                wheelchair_boarding: r.wheelchair_boarding,
+                platform_code: r.platform_code,
+            })
+            .collect();
+
+        self.routes_by_id = raw_routes
             .iter()
             .enumerate()
             .map(|(i, r)| (r.route_id.clone(), i))
             .collect();
 
-        self.trips_by_id = self
-            .trips
+        self.routes = raw_routes
+            .into_iter()
+            .enumerate()
+            .map(|(i, r)| Route {
+                idx: i,
+                agency_id: r.agency_id,
+                route_short_name: r.route_short_name,
+                route_long_name: r.route_long_name,
+                route_type: r.route_type,
+            })
+            .collect();
+
+        self.trips_by_route = vec![Vec::new(); self.routes.len()];
+
+        {
+            let mut buckets: HashMap<String, Vec<RawShapePoint>> = HashMap::default();
+            for p in raw_shape_points {
+                buckets.entry(p.shape_id.clone()).or_default().push(p);
+            }
+            let mut shape_list: Vec<(String, Vec<RawShapePoint>)> =
+                buckets.into_iter().collect();
+            shape_list.sort_by(|a, b| a.0.cmp(&b.0));
+
+            self.shapes = shape_list
+                .into_iter()
+                .enumerate()
+                .map(|(i, (shape_id, mut pts))| {
+                    pts.sort_by_key(|p| p.shape_pt_sequence);
+                    let points = pts
+                        .into_iter()
+                        .map(|p| (p.shape_pt_lat, p.shape_pt_lon))
+                        .collect();
+                    self.shapes_by_id.insert(shape_id, i);
+                    Shape { points }
+                })
+                .collect();
+        }
+
+        self.trips_by_id = raw_trips
             .iter()
             .enumerate()
             .map(|(i, t)| (t.trip_id.clone(), i))
             .collect();
 
-        self.trips_by_route.clear();
-        for (i, t) in self.trips.iter().enumerate() {
-            self.trips_by_route
-                .entry(t.route_id.clone())
-                .or_default()
-                .push(i);
-        }
+        self.trips = raw_trips
+            .into_iter()
+            .enumerate()
+            .map(|(i, r)| {
+                let route_idx = self
+                    .routes_by_id
+                    .get(&r.route_id)
+                    .copied()
+                    .unwrap_or(0);
 
-        self.stop_times_by_trip.clear();
-        self.stop_times_by_stop.clear();
+                let service_idx = *self
+                    .services_by_id
+                    .entry(r.service_id.clone())
+                    .or_insert_with(|| {
+                        let idx = self.services.len();
+                        self.services.push(r.service_id);
+                        idx
+                    });
 
-        for (i, st) in self.stop_times.iter().enumerate() {
-            self.stop_times_by_trip
-                .entry(st.trip_id.clone())
-                .or_default()
-                .push(st.clone());
+                let shape_idx = if r.shape_id.is_empty() {
+                    None
+                } else {
+                    self.shapes_by_id.get(&r.shape_id).copied()
+                };
 
-            self.stop_times_by_stop
-                .entry(st.stop_id.clone())
-                .or_default()
-                .push(i);
-        }
+                if route_idx < self.trips_by_route.len() {
+                    self.trips_by_route[route_idx].push(i);
+                }
 
-        // Pre-sort by stop_sequence so callers get ordered stops for free.
-        for stop_times in self.stop_times_by_trip.values_mut() {
-            stop_times.sort_by_key(|st| st.stop_sequence);
-        }
+                Trip {
+                    idx: i,
+                    route_idx,
+                    service_idx,
+                    trip_headsign: r.trip_headsign,
+                    direction_id: r.direction_id.unwrap_or(0),
+                    shape_idx,
+                }
+            })
+            .collect();
 
-        // Build stops_by_trip, stops_by_route and times_at from the now-sorted stop_times_by_trip.
-        self.stops_by_route.clear();
-        self.times_at.clear();
-        for (trip_id, sts) in &self.stop_times_by_trip {
-            let stop_idxs: Vec<usize> = sts
-                .iter()
-                .filter_map(|st| self.stops_by_id.get(&st.stop_id).copied())
-                .collect();
+        self.stop_times_by_trip = vec![Vec::new(); self.trips.len()];
+        self.stop_times_by_stop = vec![Vec::new(); self.stops.len()];
+        self.times_at           = vec![HashMap::default(); self.trips.len()];
 
-            if let Some(&trip_idx) = self.trips_by_id.get(trip_id) {
-                let trip = &self.trips[trip_idx];
-                let direction = trip.direction_id.unwrap_or(0) as usize;
-                let key = (trip.route_id.clone(), direction);
-                self.stops_by_route.entry(key)
-                    .and_modify(|existing| {
-                        if stop_idxs.len() > existing.len() {
-                            *existing = stop_idxs.clone();
-                        }
-                    })
-                    .or_insert(stop_idxs);
+        for r in raw_stop_times {
+            let trip_idx = match self.trips_by_id.get(&r.trip_id) {
+                Some(&i) => i,
+                None => {
+                    eprintln!("Warning: stop_time references unknown trip {}", r.trip_id);
+                    continue;
+                }
+            };
+            let stop_idx = match self.stops_by_id.get(&r.stop_id) {
+                Some(&i) => i,
+                None => {
+                    eprintln!("Warning: stop_time references unknown stop {}", r.stop_id);
+                    continue;
+                }
+            };
+
+            let arrival_secs   = parse_time(&r.arrival_time);
+            let departure_secs = parse_time(&r.departure_time);
+
+            if let (Some(arr), Some(dep)) = (arrival_secs, departure_secs) {
+                self.times_at[trip_idx].insert(stop_idx, (arr, dep));
             }
 
-            let by_stop = sts
+            self.stop_times_by_trip[trip_idx].push(StopTime {
+                trip_idx,
+                stop_idx,
+                stop_sequence: r.stop_sequence,
+                arrival_secs,
+                departure_secs,
+                stop_headsign: r.stop_headsign,
+                pickup_type:   r.pickup_type,
+                drop_off_type: r.drop_off_type,
+            });
+        }
+
+        for trip_idx in 0..self.stop_times_by_trip.len() {
+            self.stop_times_by_trip[trip_idx].sort_by_key(|st| st.stop_sequence);
+
+            for (pos, st) in self.stop_times_by_trip[trip_idx].iter().enumerate() {
+                self.stop_times_by_stop[st.stop_idx].push((trip_idx, pos));
+            }
+        }
+
+        for trip in &self.trips {
+            let stop_idxs: Vec<usize> = self.stop_times_by_trip[trip.idx]
                 .iter()
-                .filter_map(|st| {
-                    let arr = parse_time(&st.arrival_time)?;
-                    let dep = parse_time(&st.departure_time)?;
-                    Some((st.stop_id.clone(), (arr, dep)))
+                .map(|st| st.stop_idx)
+                .collect();
+
+            let key = (trip.route_idx, trip.direction_id as usize);
+            self.stops_by_route
+                .entry(key)
+                .and_modify(|existing| {
+                    if stop_idxs.len() > existing.len() {
+                        *existing = stop_idxs.clone();
+                    }
                 })
-                .collect();
-            self.times_at.insert(trip_id.clone(), by_stop);
+                .or_insert(stop_idxs);
         }
-
-        self.shapes_by_id.clear();
-        
-        // Temporary bucket to group by ID for sorting
-        let mut raw_shapes: HashMap<String, Vec<ShapePoint>> = HashMap::default();
-        for p in &self.shapes {
-            raw_shapes.entry(p.shape_id.clone()).or_default().push(p.clone());
-        }
-
-        for (shape_id, mut points) in raw_shapes {
-            // Guarantee correct sequence order
-            points.sort_by_key(|p| p.shape_pt_sequence);
-            
-            let coords: Vec<(f64, f64)> = points
-                .into_iter()
-                .map(|p| (p.shape_pt_lat, p.shape_pt_lon))
-                .collect();
-                
-            self.shapes_by_id.insert(shape_id, coords);
-        }
-
     }
 
-    pub fn arrival_at(&self, trip_id: &str, stop_id: &str) -> Option<u32> {
-        self.times_at.get(trip_id)?.get(stop_id).map(|&(arr, _)| arr)
+    pub fn arrival_at(&self, trip_idx: usize, stop_idx: usize) -> Option<u32> {
+        self.times_at.get(trip_idx)?.get(&stop_idx).map(|&(arr, _)| arr)
     }
 
-    pub fn departure_at(&self, trip_id: &str, stop_id: &str) -> Option<u32> {
-        self.times_at.get(trip_id)?.get(stop_id).map(|&(_, dep)| dep)
+    pub fn departure_at(&self, trip_idx: usize, stop_idx: usize) -> Option<u32> {
+        self.times_at.get(trip_idx)?.get(&stop_idx).map(|&(_, dep)| dep)
     }
 
     pub fn centre(&self) -> Option<(f64, f64)> {
@@ -263,12 +400,10 @@ impl Graph {
     }
 }
 
-/// Parse a GTFS time string ("HH:MM:SS", hours may exceed 23) into seconds since midnight.
-/// Returns `None` if the string is malformed.
 pub fn parse_time(s: &str) -> Option<u32> {
     let mut parts = s.splitn(3, ':');
-    let h: u32 = parts.next()?.parse().ok()?;
-    let m: u32 = parts.next()?.parse().ok()?;
+    let h:   u32 = parts.next()?.parse().ok()?;
+    let m:   u32 = parts.next()?.parse().ok()?;
     let sec: u32 = parts.next()?.parse().ok()?;
     Some(h * 3600 + m * 60 + sec)
 }
@@ -286,13 +421,11 @@ fn load_csv<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<Vec<T>> {
         .with_context(|| format!("Cannot open {}", path.display()))?;
 
     let mut out = Vec::new();
-
     for row in rdr.deserialize::<T>() {
         match row {
-            Ok(v) => out.push(v),
+            Ok(v)  => out.push(v),
             Err(e) => eprintln!("Warning: skipping row – {e}"),
         }
     }
-
     Ok(out)
 }
