@@ -132,11 +132,22 @@ pub struct StopTime {
     pub drop_off_type: Option<u16>,
 }
 
+
 #[derive(Debug, Clone)]
 pub struct Shape {
     pub points: Vec<(f64, f64)>, // (lat, lon) in shape_pt_sequence order
 }
 
+
+#[derive(Debug, Clone)]
+pub struct Connection{
+    // kinda redundant, but simple
+    pub dep_stop: usize,
+    pub arr_stop: usize,
+    pub dep_time: u32,
+    pub arr_time: u32,
+    pub trip_idx: usize,
+}
 // ---------------------------------------------------------------------------
 // Graph
 // ---------------------------------------------------------------------------
@@ -161,6 +172,7 @@ pub struct Graph {
     pub stop_times_by_stop: Vec<Vec<(usize, usize)>>,
     pub stops_by_route: HashMap<(usize, usize), Vec<usize>>,
     pub times_at: Vec<HashMap<usize, (u32, u32)>>,
+    pub connections: Vec<Connection>,
 }
 
 impl Graph {
@@ -346,6 +358,19 @@ impl Graph {
                 drop_off_type: r.drop_off_type,
             });
         }
+        
+        for trip in &self.stop_times_by_trip {
+            let mut prev_stop_time: Option<(usize, u32)> = None; //arrival, departure time
+            for cur in trip{
+                if let Some(prev_stop_time) = prev_stop_time {
+                    let cur_arrival = cur.arrival_secs.unwrap();
+                   self.connections.push(Connection { dep_stop: prev_stop_time.0, arr_stop: cur.stop_idx, dep_time: prev_stop_time.1, arr_time: cur_arrival, trip_idx: cur.trip_idx }); 
+                }
+                prev_stop_time = Some((cur.stop_idx, cur.arrival_secs.unwrap()));
+            }
+        }
+        
+        self.connections.sort_by_key(|k| k.dep_time);
 
         for trip_idx in 0..self.stop_times_by_trip.len() {
             self.stop_times_by_trip[trip_idx].sort_by_key(|st| st.stop_sequence);

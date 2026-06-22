@@ -6,7 +6,7 @@ pub mod route_search;
 
 use walkers::{HttpTiles, MapMemory, lat_lon};
 
-use crate::{graph::Graph, raptor::Journey};
+use crate::{graph::Graph, journey::Journey};
 
 #[derive(PartialEq)]
 pub(super) enum Tab { Map, Routes }
