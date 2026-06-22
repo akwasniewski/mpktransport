@@ -4,6 +4,16 @@ use serde::Deserialize;
 use std::{path::Path};
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct ShapePoint {
+    pub shape_id: String,
+    pub shape_pt_lat: f64,
+    pub shape_pt_lon: f64,
+    pub shape_pt_sequence: u32,
+    #[serde(default)]
+    pub shape_dist_traveled: Option<f64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct Stop {
     pub stop_id: String,
     #[serde(default)]
@@ -54,6 +64,8 @@ pub struct Trip {
     pub trip_headsign: String,
     #[serde(default)]
     pub direction_id: Option<u16>,
+    #[serde(default)]
+    pub shape_id: String, 
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -78,11 +90,12 @@ pub struct Graph {
     pub trips: Vec<Trip>,
     pub stop_times: Vec<StopTime>,
     pub source_dir: String,
-
+    pub shapes: Vec<ShapePoint>,
     // indexes
     pub stops_by_id: HashMap<String, usize>,
     pub routes_by_id: HashMap<String, usize>,
     pub trips_by_id: HashMap<String, usize>,
+    pub shapes_by_id: HashMap<String, Vec<(f64, f64)>>,
     pub trips_by_route: HashMap<String, Vec<usize>>,
 
     pub stop_times_by_trip: HashMap<String, Vec<StopTime>>,
@@ -101,12 +114,14 @@ impl Graph {
         let routes = load_csv(&dir.join("routes.txt"))?;
         let trips = load_csv(&dir.join("trips.txt"))?;
         let stop_times = load_csv(&dir.join("stop_times.txt"))?;
+        let shapes = load_csv(&dir.join("shapes.txt"))?;
 
         let mut graph = Self {
             stops,
             routes,
             trips,
             stop_times,
+            shapes,
             source_dir: dir.to_string_lossy().into_owned(),
             ..Default::default()
         };
@@ -198,6 +213,27 @@ impl Graph {
                 .collect();
             self.times_at.insert(trip_id.clone(), by_stop);
         }
+
+        self.shapes_by_id.clear();
+        
+        // Temporary bucket to group by ID for sorting
+        let mut raw_shapes: HashMap<String, Vec<ShapePoint>> = HashMap::default();
+        for p in &self.shapes {
+            raw_shapes.entry(p.shape_id.clone()).or_default().push(p.clone());
+        }
+
+        for (shape_id, mut points) in raw_shapes {
+            // Guarantee correct sequence order
+            points.sort_by_key(|p| p.shape_pt_sequence);
+            
+            let coords: Vec<(f64, f64)> = points
+                .into_iter()
+                .map(|p| (p.shape_pt_lat, p.shape_pt_lon))
+                .collect();
+                
+            self.shapes_by_id.insert(shape_id, coords);
+        }
+
     }
 
     pub fn arrival_at(&self, trip_id: &str, stop_id: &str) -> Option<u32> {

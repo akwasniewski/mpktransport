@@ -1,6 +1,7 @@
+use egui::{Color32, Stroke};
 use walkers::{Map, lat_lon};
 
-use crate::app::{App, stop_plugin::StopPlugin};
+use crate::app::{App, shapes_plugin::ShapeLinesPlugin, stop_plugin::StopPlugin};
 
 impl App {
     pub(super) fn draw_map(&mut self, ui: &mut egui::Ui) {
@@ -23,28 +24,35 @@ impl App {
             })
             .collect();
 
-
-        // Build the plugin — we use a Mutex-free trick: capture `clicked` as a
-        // shared cell so the plugin can write back to us after being consumed.
         let clicked_cell = std::rc::Rc::new(std::cell::Cell::new(Option::<usize>::None));
         let clicked_cell2 = clicked_cell.clone();
         let highlighted: std::collections::HashSet<usize> = match self.route_result {
             Some((a, b, _)) => [a, b].into(),
             None => std::collections::HashSet::new(),
         };
-        let plugin = StopPlugin {
+
+        let stop_plugin = StopPlugin {
             stops: stops_data,
             pointer,
             clicked_out: clicked_cell2,
             highlighted
         };
 
+        // Get the shape tracking lines from our current search output
+        let active_shapes = self.get_active_route_shapes();
+        let shapes_plugin = ShapeLinesPlugin {
+            paths: active_shapes,
+            stroke: Stroke::new(4.0, Color32::from_rgb(0, 122, 255)), // Vibrant Blue Route Path
+        };
+
+        // Combine both plugins chain-style inside walkers::Map builder configuration
         let map_widget = Map::new(
             Some(&mut self.tiles),
             &mut self.map_memory,
-            live_centre,          // always matches what the Projector will use
+            live_centre,
         )
-        .with_plugin(plugin);
+        .with_plugin(shapes_plugin) // Renders shapes lines beneath the icons
+        .with_plugin(stop_plugin);
 
         ui.add(map_widget);
 
