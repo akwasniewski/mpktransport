@@ -14,12 +14,10 @@ fn main() -> Result<()> {
     let departure: Secs = 8 * 3600; // 08:00
     println!("\nDeparture: {}\n", fmt_time(departure));
 
-    let from = "stop_346_269029";
-    let to = "stop_321_115419";
-    // let to = "stop_191_7719";
+
 
     let mut raptor = Raptor::new(&graph);
-    match raptor.query(from, to, departure) {
+    match raptor.query(0, 230, departure) {
         Some(j) => {
             println!("Arrive: {}", fmt_time(j.arrival));
             println!("Path ({} stops):", j.legs.len());

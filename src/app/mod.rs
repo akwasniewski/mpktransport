@@ -67,7 +67,6 @@ impl App {
             .enumerate()
             .filter(|(_, s)| {
                 q.is_empty()
-                    || s.stop_id.to_lowercase().contains(&q)
                     || s.stop_code.to_lowercase().contains(&q)
                     || s.stop_name.to_lowercase().contains(&q)
                     || s.stop_desc.to_lowercase().contains(&q)

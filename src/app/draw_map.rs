@@ -56,11 +56,6 @@ impl App {
 
         ui.add(map_widget);
 
-        // Apply any click that happened inside the plugin
-        if let Some(idx) = clicked_cell.get() {
-            self.selected = Some(idx);
-            self.select_stop(idx);
-        }
         ctx.request_repaint();
     }
 }
