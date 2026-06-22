@@ -371,6 +371,27 @@ impl Graph {
                 })
                 .or_insert(stop_idxs);
         }
+
+        self.shapes_by_id.clear();
+        
+        // Temporary bucket to group by ID for sorting
+        let mut raw_shapes: HashMap<String, Vec<ShapePoint>> = HashMap::default();
+        for p in &self.shapes {
+            raw_shapes.entry(p.shape_id.clone()).or_default().push(p.clone());
+        }
+
+        for (shape_id, mut points) in raw_shapes {
+            // Guarantee correct sequence order
+            points.sort_by_key(|p| p.shape_pt_sequence);
+            
+            let coords: Vec<(f64, f64)> = points
+                .into_iter()
+                .map(|p| (p.shape_pt_lat, p.shape_pt_lon))
+                .collect();
+                
+            self.shapes_by_id.insert(shape_id, coords);
+        }
+
     }
 
     pub fn arrival_at(&self, trip_idx: usize, stop_idx: usize) -> Option<u32> {
