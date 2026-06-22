@@ -1,4 +1,4 @@
-use crate::{app::App, raptor::{Raptor}, utils::fmt_time};
+use crate::{app::{App, RoutingAlgorithm}, csa::Csa, raptor::Raptor, utils::fmt_time};
 
 impl App {
     pub(super) fn draw_route_search(&mut self, ui: &mut egui::Ui) {
@@ -157,6 +157,18 @@ impl App {
         ui.add_space(12.0);
 
         // ── Search button ────────────────────────────────────────────────
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("Algorithm:").weak());
+            ui.selectable_value(&mut self.routing_algorithm, RoutingAlgorithm::Raptor, "RAPTOR");
+            ui.selectable_value(&mut self.routing_algorithm, RoutingAlgorithm::Csa, "CSA");
+        });
+
+        ui.add_space(20.0);
+        ui.separator();
+        ui.add_space(12.0);
+
+        // ── Search button ────────────────────────────────────────────────
         let same = self.route_from_selected.is_some()
             && self.route_from_selected == self.route_to_selected;
         let can_search = self.route_from_selected.is_some()
@@ -172,27 +184,23 @@ impl App {
                 .clicked()
             {
                 let from_idx = self.route_from_selected.unwrap();
-                let to_idx   = self.route_to_selected.unwrap();
+                let to_idx = self.route_to_selected.unwrap();
+                let source_time = 8 * 3600;
 
-                let mut raptor = Raptor::new(&self.graph);
-                let journey = raptor.query(from_idx, to_idx, 8 * 3600);
+                let journey = match self.routing_algorithm {
+                    RoutingAlgorithm::Raptor => {
+                        let mut raptor = Raptor::new(&self.graph);
+                        raptor.query(from_idx, to_idx, source_time)
+                    }
+                    RoutingAlgorithm::Csa => {
+                        let csa = Csa::new(&self.graph);
+                        csa.query(from_idx, to_idx, source_time)
+                    }
+                };
+
                 self.route_result = Some((from_idx, to_idx, journey));
             }
         });
-
-        if !can_search {
-            ui.add_space(4.0);
-            let hint = if same {
-                "Origin and destination must differ."
-            } else {
-                "Select both a From and a To stop."
-            };
-            ui.label(egui::RichText::new(hint).small().weak().italics());
-        }
-
-        ui.add_space(12.0);
-        ui.separator();
-        ui.add_space(8.0);
 
         // ── Results ──────────────────────────────────────────────────────
         ui.label(egui::RichText::new("Results").strong());

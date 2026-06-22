@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
-use mpktransport::utils::fmt_time;
+use mpktransport::utils::{Secs, fmt_time};
 use std::path::Path;
 
 use mpktransport::graph::Graph;
-use mpktransport::raptor::{Raptor, Secs};
+use mpktransport::raptor::{Raptor};
 
 fn main() -> Result<()> {
     let graph = Graph::load(Path::new("data/GTFS_KRK_T"))

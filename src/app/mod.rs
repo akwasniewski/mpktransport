@@ -11,6 +11,12 @@ use crate::{graph::Graph, journey::Journey};
 #[derive(PartialEq)]
 pub(super) enum Tab { Map, Routes }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum RoutingAlgorithm {
+    Raptor,
+    Csa,
+}
+
 pub struct App {
     pub(super) graph: Graph,
     pub(super) filter: String,
@@ -27,6 +33,7 @@ pub struct App {
     pub(super) route_from_focused: bool,
     pub(super) route_to_focused: bool,
     pub(super) route_result: Option<(usize, usize, Option<Journey>)>,
+    pub(super) routing_algorithm: RoutingAlgorithm,
 }
 
 impl App {
@@ -55,6 +62,7 @@ impl App {
         route_from_focused: false,
         route_to_focused: false,
         route_result: None,
+        routing_algorithm: RoutingAlgorithm::Raptor,
     }
 
     }
