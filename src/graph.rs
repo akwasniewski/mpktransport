@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
-use std::{collections::{HashMap, HashSet}, path::Path};
+use std::{collections::{HashMap, HashSet}, os::macos::raw::stat, path::Path};
+
+use crate::utils::Secs;
 
 #[derive(Debug, Deserialize)]
 struct RawShapePoint {
@@ -94,6 +96,7 @@ pub struct Stop {
     pub stop_url: String,
     pub location_type: Option<u8>,
     pub station: usize,
+    pub foothpaths: Vec<(usize, Secs)>,
     pub stop_timezone: String,
     pub wheelchair_boarding: Option<u8>,
     pub platform_code: String,
@@ -241,6 +244,7 @@ impl Graph {
                     stop_lon: stop.stop_lon,
                     zone_id: stop.zone_id,
                     stop_url: stop.stop_url,
+                    foothpaths: Vec::new(),
                     location_type: stop.location_type,
                     stop_timezone: stop.stop_timezone,
                     wheelchair_boarding: stop.wheelchair_boarding,
@@ -250,6 +254,17 @@ impl Graph {
             .collect();
         self.stations = stations_set.into_values().collect();
         self.stations.sort_by_key(|k| k.idx);
+
+        for station in &self.stations{
+            for i in 0..station.stops.len(){
+                let i = station.stops[i];
+                self.stops[i].foothpaths.push((i, 60)); // min changeover 1 minutes
+                for j in (i+1)..station.stops.len(){
+                    let j = station.stops[j];
+                    self.stops[i].foothpaths.push((j,180)); // min stop change 3 minutes
+                }
+            }
+        }
 
         self.routes_by_id = raw_routes
             .iter()

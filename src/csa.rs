@@ -9,6 +9,7 @@ pub struct Csa<'a> {
 struct JourneyMarker{
     c_enter: usize,
     c_exit: usize,
+    f_dur: Secs,
 }
 
 impl<'a> Csa<'a> {
@@ -68,10 +69,12 @@ impl<'a> Csa<'a> {
                 if t[c.trip_idx].is_none(){
                     t[c.trip_idx] = Some(c_idx);
                 }
+                for f in &self.graph.stops[c.arr_stop].foothpaths{
+                    if s[f.0].is_none_or(|arr_arrival| c.arr_time + f.1 < arr_arrival){
+                        s[f.0] = Some(c.arr_time + f.1);
+                        j[f.0] = Some(JourneyMarker{c_enter: t[c.trip_idx].unwrap(), c_exit: c_idx, f_dur: f.1});
+                    }
 
-                if s[c.arr_stop].is_none_or(|arr_arrival| c.arr_time < arr_arrival){
-                    s[c.arr_stop] = Some(c.arr_time);
-                    j[c.arr_stop] = Some(JourneyMarker{c_enter: t[c.trip_idx].unwrap(), c_exit: c_idx});
                 }
             }
 
@@ -83,6 +86,7 @@ impl<'a> Csa<'a> {
                 best_target = Some((*stop, s[*stop]?));
             }
         }
+        println!("{:?}", best_target);
         self.get_journey(best_target, &j)
     }
 }
