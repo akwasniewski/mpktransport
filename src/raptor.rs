@@ -22,7 +22,7 @@ fn gen_crossings(graph: &Graph) -> HashMap<(usize, usize), Secs> {
     let mut crossings = HashMap::new();
     for c1 in &graph.stops {
         for c2 in &graph.stops {
-            if c1.stop_name == c2.stop_name {
+            if c1.station == c2.station {
                 crossings.insert((c1.idx, c2.idx), 0);
             }
         }
@@ -124,6 +124,7 @@ impl<'a> Raptor<'a> {
         }
     }
 
+    //TODO: fix to work with stations
     pub fn query(&mut self, from_stop: usize, to_stop: usize, departure: Secs) -> Option<Journey> {
         println!("from_stop: {}, to_stop: {}, departure: {}", from_stop, to_stop, departure);
 
@@ -150,16 +151,16 @@ impl<'a> Raptor<'a> {
 
         while current.idx != from_stop {
             let route_idx = self.graph.trips[current.trip_idx].route_idx;
-            legs.push(Leg::first(current.arrival_time, current.idx, self.graph.stops[current.idx].stop_name.clone(), current.trip_idx, self.graph.trips[current.trip_idx].trip_headsign.clone(), self.graph.routes[route_idx].route_short_name.clone()));
+            legs.push(Leg::first(current.arrival_time, current.idx, self.graph.stops[current.idx].name.clone(), current.trip_idx, self.graph.trips[current.trip_idx].trip_headsign.clone(), self.graph.routes[route_idx].route_short_name.clone()));
             match parent[current.idx].clone() {
                 Some(p) => current = p,
                 None => break,
             }
             let route_idx = self.graph.trips[current.trip_idx].route_idx;
-            legs.push(Leg::first(current.arrival_time, current.idx, self.graph.stops[current.idx].stop_name.clone(), current.trip_idx, self.graph.trips[current.trip_idx].trip_headsign.clone(), self.graph.routes[route_idx].route_short_name.clone()));
+            legs.push(Leg::first(current.arrival_time, current.idx, self.graph.stops[current.idx].name.clone(), current.trip_idx, self.graph.trips[current.trip_idx].trip_headsign.clone(), self.graph.routes[route_idx].route_short_name.clone()));
         }
 
-        legs.push(Leg::second(departure, from_stop,self.graph.stops[from_stop].stop_name.clone()));
+        legs.push(Leg::second(departure, from_stop,self.graph.stops[from_stop].name.clone()));
         legs.reverse();
 
         Some(Journey { legs, arrival })

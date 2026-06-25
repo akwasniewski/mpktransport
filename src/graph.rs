@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
-use egui::ahash::HashMap;
 use serde::Deserialize;
-use std::path::Path;
+use std::{collections::{HashMap, HashSet}, path::Path};
 
 #[derive(Debug, Deserialize)]
 struct RawShapePoint {
@@ -87,14 +86,14 @@ struct RawStopTime {
 pub struct Stop {
     pub idx: usize,
     pub stop_code: String,
-    pub stop_name: String,
+    pub name: String,
     pub stop_desc: String,
     pub stop_lat: Option<f64>,
     pub stop_lon: Option<f64>,
     pub zone_id: String,
     pub stop_url: String,
     pub location_type: Option<u8>,
-    pub parent_station: Option<usize>,
+    pub station: usize,
     pub stop_timezone: String,
     pub wheelchair_boarding: Option<u8>,
     pub platform_code: String,
@@ -107,6 +106,13 @@ pub struct Route {
     pub route_short_name: String,
     pub route_long_name: String,
     pub route_type: Option<u16>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Station {
+    pub idx: usize,
+    pub name: String,
+    pub stops: Vec<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -159,6 +165,7 @@ pub struct Graph {
     pub trips: Vec<Trip>,
     pub shapes: Vec<Shape>,
     pub services: Vec<String>,
+    pub stations: Vec<Station>,
 
     pub source_dir: String,
     pub stops_by_id: HashMap<String, usize>,
@@ -170,8 +177,10 @@ pub struct Graph {
     pub trips_by_route: Vec<Vec<usize>>,
     pub stop_times_by_trip: Vec<Vec<StopTime>>,
     pub stop_times_by_stop: Vec<Vec<(usize, usize)>>,
+    
     pub stops_by_route: HashMap<(usize, usize), Vec<usize>>,
     pub times_at: Vec<HashMap<usize, (u32, u32)>>,
+
     pub connections: Vec<Connection>,
 }
 
@@ -206,29 +215,41 @@ impl Graph {
             .map(|(i, s)| (s.stop_id.clone(), i))
             .collect();
 
+        
+        let mut stations_set: HashMap<String, Station> = HashMap::new();
         self.stops = raw_stops
             .into_iter()
             .enumerate()
-            .map(|(i, r)| Stop {
-                idx: i,
-                parent_station: if r.parent_station.is_empty() {
-                    None
-                } else {
-                    self.stops_by_id.get(&r.parent_station).copied()
-                },
-                stop_code: r.stop_code,
-                stop_name: r.stop_name,
-                stop_desc: r.stop_desc,
-                stop_lat: r.stop_lat,
-                stop_lon: r.stop_lon,
-                zone_id: r.zone_id,
-                stop_url: r.stop_url,
-                location_type: r.location_type,
-                stop_timezone: r.stop_timezone,
-                wheelchair_boarding: r.wheelchair_boarding,
-                platform_code: r.platform_code,
+            .map(|(idx, stop)| {
+                let mut station_idx = 0;
+                if let Some(cur_station) = stations_set.get_mut(&stop.stop_name){
+                    cur_station.stops.push(idx);
+                    station_idx = cur_station.idx; 
+                }
+                else{
+                    station_idx = stations_set.len();
+                    stations_set.insert(stop.stop_name.clone(), Station{idx: station_idx, name: stop.stop_name.clone(), stops: vec![idx]});
+                }
+
+                Stop {
+                    idx,
+                    station: station_idx, 
+                    stop_code: stop.stop_code,
+                    name: stop.stop_name,
+                    stop_desc: stop.stop_desc,
+                    stop_lat: stop.stop_lat,
+                    stop_lon: stop.stop_lon,
+                    zone_id: stop.zone_id,
+                    stop_url: stop.stop_url,
+                    location_type: stop.location_type,
+                    stop_timezone: stop.stop_timezone,
+                    wheelchair_boarding: stop.wheelchair_boarding,
+                    platform_code: stop.platform_code,
+                }
             })
             .collect();
+        self.stations = stations_set.into_values().collect();
+        self.stations.sort_by_key(|k| k.idx);
 
         self.routes_by_id = raw_routes
             .iter()
