@@ -5,7 +5,7 @@ impl App {
         let stop = &self.graph.stops[idx];
 
         ui.vertical(|ui| {
-            ui.heading(&stop.stop_name);
+            ui.heading(&stop.name);
             ui.add_space(4.0);
 
             ui.label(format!("ID: {}", stop.idx));

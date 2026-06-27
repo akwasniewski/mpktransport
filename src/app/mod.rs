@@ -76,7 +76,7 @@ impl App {
             .filter(|(_, s)| {
                 q.is_empty()
                     || s.stop_code.to_lowercase().contains(&q)
-                    || s.stop_name.to_lowercase().contains(&q)
+                    || s.name.to_lowercase().contains(&q)
                     || s.stop_desc.to_lowercase().contains(&q)
             })
             .map(|(i, _)| i)
