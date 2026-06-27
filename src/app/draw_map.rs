@@ -20,7 +20,7 @@ impl App {
             .iter()
             .filter_map(|&i| {
                 let s = &self.graph.stops[i];
-                Some((s.stop_lat?, s.stop_lon?, s.stop_name.clone(), i, self.selected == Some(i)))
+                Some((s.stop_lat?, s.stop_lon?, s.name.clone(), i, self.selected == Some(i)))
             })
             .collect();
 

@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
-use egui::ahash::HashMap;
 use serde::Deserialize;
-use std::path::Path;
+use std::{collections::{HashMap, HashSet}, os::macos::raw::stat, path::Path};
+
+use crate::utils::Secs;
 
 #[derive(Debug, Deserialize)]
 struct RawShapePoint {
@@ -87,14 +88,15 @@ struct RawStopTime {
 pub struct Stop {
     pub idx: usize,
     pub stop_code: String,
-    pub stop_name: String,
+    pub name: String,
     pub stop_desc: String,
     pub stop_lat: Option<f64>,
     pub stop_lon: Option<f64>,
     pub zone_id: String,
     pub stop_url: String,
     pub location_type: Option<u8>,
-    pub parent_station: Option<usize>,
+    pub station: usize,
+    pub foothpaths: Vec<(usize, Secs)>,
     pub stop_timezone: String,
     pub wheelchair_boarding: Option<u8>,
     pub platform_code: String,
@@ -107,6 +109,13 @@ pub struct Route {
     pub route_short_name: String,
     pub route_long_name: String,
     pub route_type: Option<u16>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Station {
+    pub idx: usize,
+    pub name: String,
+    pub stops: Vec<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -132,11 +141,22 @@ pub struct StopTime {
     pub drop_off_type: Option<u16>,
 }
 
+
 #[derive(Debug, Clone)]
 pub struct Shape {
     pub points: Vec<(f64, f64)>, // (lat, lon) in shape_pt_sequence order
 }
 
+
+#[derive(Debug, Clone)]
+pub struct Connection{
+    // kinda redundant, but simple
+    pub dep_stop: usize,
+    pub arr_stop: usize,
+    pub dep_time: u32,
+    pub arr_time: u32,
+    pub trip_idx: usize,
+}
 // ---------------------------------------------------------------------------
 // Graph
 // ---------------------------------------------------------------------------
@@ -148,6 +168,7 @@ pub struct Graph {
     pub trips: Vec<Trip>,
     pub shapes: Vec<Shape>,
     pub services: Vec<String>,
+    pub stations: Vec<Station>,
 
     pub source_dir: String,
     pub stops_by_id: HashMap<String, usize>,
@@ -159,8 +180,11 @@ pub struct Graph {
     pub trips_by_route: Vec<Vec<usize>>,
     pub stop_times_by_trip: Vec<Vec<StopTime>>,
     pub stop_times_by_stop: Vec<Vec<(usize, usize)>>,
+    
     pub stops_by_route: HashMap<(usize, usize), Vec<usize>>,
     pub times_at: Vec<HashMap<usize, (u32, u32)>>,
+
+    pub connections: Vec<Connection>,
 }
 
 impl Graph {
@@ -194,29 +218,53 @@ impl Graph {
             .map(|(i, s)| (s.stop_id.clone(), i))
             .collect();
 
+        
+        let mut stations_set: HashMap<String, Station> = HashMap::new();
         self.stops = raw_stops
             .into_iter()
             .enumerate()
-            .map(|(i, r)| Stop {
-                idx: i,
-                parent_station: if r.parent_station.is_empty() {
-                    None
-                } else {
-                    self.stops_by_id.get(&r.parent_station).copied()
-                },
-                stop_code: r.stop_code,
-                stop_name: r.stop_name,
-                stop_desc: r.stop_desc,
-                stop_lat: r.stop_lat,
-                stop_lon: r.stop_lon,
-                zone_id: r.zone_id,
-                stop_url: r.stop_url,
-                location_type: r.location_type,
-                stop_timezone: r.stop_timezone,
-                wheelchair_boarding: r.wheelchair_boarding,
-                platform_code: r.platform_code,
+            .map(|(idx, stop)| {
+                let mut station_idx = 0;
+                if let Some(cur_station) = stations_set.get_mut(&stop.stop_name){
+                    cur_station.stops.push(idx);
+                    station_idx = cur_station.idx; 
+                }
+                else{
+                    station_idx = stations_set.len();
+                    stations_set.insert(stop.stop_name.clone(), Station{idx: station_idx, name: stop.stop_name.clone(), stops: vec![idx]});
+                }
+
+                Stop {
+                    idx,
+                    station: station_idx, 
+                    stop_code: stop.stop_code,
+                    name: stop.stop_name,
+                    stop_desc: stop.stop_desc,
+                    stop_lat: stop.stop_lat,
+                    stop_lon: stop.stop_lon,
+                    zone_id: stop.zone_id,
+                    stop_url: stop.stop_url,
+                    foothpaths: Vec::new(),
+                    location_type: stop.location_type,
+                    stop_timezone: stop.stop_timezone,
+                    wheelchair_boarding: stop.wheelchair_boarding,
+                    platform_code: stop.platform_code,
+                }
             })
             .collect();
+        self.stations = stations_set.into_values().collect();
+        self.stations.sort_by_key(|k| k.idx);
+
+        for station in &self.stations{
+            for i in 0..station.stops.len(){
+                let i = station.stops[i];
+                self.stops[i].foothpaths.push((i, 60)); // min changeover 1 minutes
+                for j in (i+1)..station.stops.len(){
+                    let j = station.stops[j];
+                    self.stops[i].foothpaths.push((j,180)); // min stop change 3 minutes
+                }
+            }
+        }
 
         self.routes_by_id = raw_routes
             .iter()
@@ -346,6 +394,19 @@ impl Graph {
                 drop_off_type: r.drop_off_type,
             });
         }
+        
+        for trip in &self.stop_times_by_trip {
+            let mut prev_stop_time: Option<(usize, u32)> = None; //arrival, departure time
+            for cur in trip{
+                if let Some(prev_stop_time) = prev_stop_time {
+                    let cur_arrival = cur.arrival_secs.unwrap();
+                   self.connections.push(Connection { dep_stop: prev_stop_time.0, arr_stop: cur.stop_idx, dep_time: prev_stop_time.1, arr_time: cur_arrival, trip_idx: cur.trip_idx }); 
+                }
+                prev_stop_time = Some((cur.stop_idx, cur.arrival_secs.unwrap()));
+            }
+        }
+        
+        self.connections.sort_by_key(|k| k.dep_time);
 
         for trip_idx in 0..self.stop_times_by_trip.len() {
             self.stop_times_by_trip[trip_idx].sort_by_key(|st| st.stop_sequence);

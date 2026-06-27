@@ -1,9 +1,8 @@
 use anyhow::{Context, Result};
-use mpktransport::utils::fmt_time;
+use mpktransport::{csa::Csa, utils::{Secs, fmt_time}};
 use std::path::Path;
 
 use mpktransport::graph::Graph;
-use mpktransport::raptor::{Raptor, Secs};
 
 fn main() -> Result<()> {
     let graph = Graph::load(Path::new("data/GTFS_KRK_T"))
@@ -16,8 +15,8 @@ fn main() -> Result<()> {
 
 
 
-    let mut raptor = Raptor::new(&graph);
-    match raptor.query(0, 230, departure) {
+    let csa = Csa::new(&graph);
+    match csa.query(0, 230, departure) {
         Some(j) => {
             println!("Arrive: {}", fmt_time(j.arrival));
             println!("Path ({} stops):", j.legs.len());
