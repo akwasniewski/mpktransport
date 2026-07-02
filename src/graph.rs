@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
-use std::{collections::{HashMap, HashSet}, os::macos::raw::stat, path::Path};
+use std::{collections::{HashMap, HashSet}, path::Path};
 
 use crate::utils::Secs;
 
@@ -157,6 +157,14 @@ pub struct Connection{
     pub arr_time: u32,
     pub trip_idx: usize,
 }
+
+#[derive(Debug, Clone)]
+pub struct RaptorRoute {
+    pub route_idx: usize,
+    pub stops: Vec<usize>,
+    pub trips: Vec<usize>,
+}
+
 // ---------------------------------------------------------------------------
 // Graph
 // ---------------------------------------------------------------------------
@@ -180,11 +188,12 @@ pub struct Graph {
     pub trips_by_route: Vec<Vec<usize>>,
     pub stop_times_by_trip: Vec<Vec<StopTime>>,
     pub stop_times_by_stop: Vec<Vec<(usize, usize)>>,
-    
+
     pub stops_by_route: HashMap<(usize, usize), Vec<usize>>,
     pub times_at: Vec<HashMap<usize, (u32, u32)>>,
 
     pub connections: Vec<Connection>,
+    pub raptor_routes: Vec<RaptorRoute>,
 }
 
 impl Graph {
@@ -218,7 +227,6 @@ impl Graph {
             .map(|(i, s)| (s.stop_id.clone(), i))
             .collect();
 
-        
         let mut stations_set: HashMap<String, Station> = HashMap::new();
         self.stops = raw_stops
             .into_iter()
@@ -227,7 +235,7 @@ impl Graph {
                 let mut station_idx = 0;
                 if let Some(cur_station) = stations_set.get_mut(&stop.stop_name){
                     cur_station.stops.push(idx);
-                    station_idx = cur_station.idx; 
+                    station_idx = cur_station.idx;
                 }
                 else{
                     station_idx = stations_set.len();
@@ -236,7 +244,7 @@ impl Graph {
 
                 Stop {
                     idx,
-                    station: station_idx, 
+                    station: station_idx,
                     stop_code: stop.stop_code,
                     name: stop.stop_name,
                     stop_desc: stop.stop_desc,
@@ -394,18 +402,18 @@ impl Graph {
                 drop_off_type: r.drop_off_type,
             });
         }
-        
+
         for trip in &self.stop_times_by_trip {
             let mut prev_stop_time: Option<(usize, u32)> = None; //arrival, departure time
             for cur in trip{
                 if let Some(prev_stop_time) = prev_stop_time {
                     let cur_arrival = cur.arrival_secs.unwrap();
-                   self.connections.push(Connection { dep_stop: prev_stop_time.0, arr_stop: cur.stop_idx, dep_time: prev_stop_time.1, arr_time: cur_arrival, trip_idx: cur.trip_idx }); 
+                   self.connections.push(Connection { dep_stop: prev_stop_time.0, arr_stop: cur.stop_idx, dep_time: prev_stop_time.1, arr_time: cur_arrival, trip_idx: cur.trip_idx });
                 }
                 prev_stop_time = Some((cur.stop_idx, cur.arrival_secs.unwrap()));
             }
         }
-        
+
         self.connections.sort_by_key(|k| k.dep_time);
 
         for trip_idx in 0..self.stop_times_by_trip.len() {
@@ -432,6 +440,29 @@ impl Graph {
                 })
                 .or_insert(stop_idxs);
         }
+
+        let mut routes_map: HashMap<(usize, Vec<usize>), Vec<usize>> = HashMap::new();
+        for trip in &self.trips {
+            let stops: Vec<usize> = self.stop_times_by_trip[trip.idx]
+                .iter()
+                .map(|st| st.stop_idx)
+                .collect();
+            if stops.is_empty() {
+                continue;
+            }
+            routes_map.entry((trip.route_idx, stops)).or_default().push(trip.idx);
+        }
+
+        let mut raptor_routes = Vec::new();
+        for ((route_idx, stops), mut trips) in routes_map {
+            trips.sort_by_key(|&t_idx| self.departure_at(t_idx, stops[0]).unwrap_or(0));
+            raptor_routes.push(RaptorRoute {
+                route_idx,
+                stops,
+                trips,
+            });
+        }
+        self.raptor_routes = raptor_routes;
     }
 
     pub fn arrival_at(&self, trip_idx: usize, stop_idx: usize) -> Option<u32> {
