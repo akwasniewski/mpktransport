@@ -194,6 +194,7 @@ pub struct Graph {
 
     pub connections: Vec<Connection>,
     pub raptor_routes: Vec<RaptorRoute>,
+    pub rroutes_by_stop: Vec<Vec<(usize, usize)>>,
 }
 
 impl Graph {
@@ -463,6 +464,14 @@ impl Graph {
             });
         }
         self.raptor_routes = raptor_routes;
+
+        let mut rroutes_by_stop = vec![Vec::new(); self.stops.len()];
+        for (r_idx, r) in self.raptor_routes.iter().enumerate() {
+            for (pos, &stop_id) in r.stops.iter().enumerate() {
+                rroutes_by_stop[stop_id].push((r_idx, pos));
+            }
+        }
+        self.rroutes_by_stop = rroutes_by_stop;
     }
 
     pub fn arrival_at(&self, trip_idx: usize, stop_idx: usize) -> Option<u32> {

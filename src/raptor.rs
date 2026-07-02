@@ -1,11 +1,14 @@
-use crate::graph::{Graph, Trip, RaptorRoute};
+
+use crate::graph::{Graph};
 use crate::journey::{Journey, Leg};
 use crate::utils::Secs;
-use std::collections::{HashMap};
+use std::cmp::min;
+use std::collections::{HashMap, HashSet};
+use std::vec;
 
 pub struct Raptor<'a> {
     graph: &'a Graph,
-    crossings: HashMap<(usize, usize), Secs>,
+    footpaths: HashMap<(usize, usize), Secs>,
 }
 
 #[derive(Debug, Clone)]
@@ -31,116 +34,122 @@ impl<'a> Raptor<'a> {
     pub fn new(graph: &'a Graph) -> Self {
         Self {
             graph,
-            crossings: gen_crossings(graph),
+            footpaths: gen_crossings(graph),
         }
     }
 
-    fn et(&self, route: &RaptorRoute, stop_id: usize, tau: Secs) -> Option<&Trip> {
-        let mut best_trip: Option<&Trip> = None;
-        let mut best_dep = Secs::MAX;
-
-        for &ti in &route.trips {
-            let trip = &self.graph.trips[ti];
-            let Some(dep) = self.graph.departure_at(trip.idx, stop_id) else {
-                continue;
-            };
-
-            if dep >= tau && dep < best_dep {
-                best_dep = dep;
-                best_trip = Some(trip);
-            }
-        }
-
-        best_trip
-    }
-
-    fn scan_route(
-        &self,
-        route: &RaptorRoute,
-        tau_prev: &[Secs],
-        tau_k: &mut[Secs],
-        parent_k: &mut[Option<Parent>],
-    ) {
-        let mut current_trip: Option<(&Trip, usize)> = None;
-
-        for &stop_id in &route.stops {
-            if current_trip.is_none() {
-                // find first trip that arrives at this stop
-                let trip = self.et(route, stop_id, tau_prev[stop_id]);
-                current_trip = trip.map(|trip| (trip, stop_id));
-            }
-
-            if let Some((trip, _boarding_stop_id)) = current_trip {
-                let arrival_time = match self.graph.arrival_at(trip.idx, stop_id) {
-                    Some(time) => time,
-                    None => continue,
-                };
-                // check if we can switch to a faster trip
-                if tau_prev[stop_id] < arrival_time {
-                    let first_trip = self.et(route, stop_id, tau_prev[stop_id]);
-                    current_trip = first_trip.map(|trip| (trip, stop_id));
-                }
-            }
-
-            if let Some((trip, boarding_stop_id)) = current_trip {
-                let arrival_time = match self.graph.arrival_at(trip.idx, stop_id) {
-                    Some(time) => time,
-                    None => continue,
-                };
-                // update the time for the stop
-                if let Some(val) = tau_k.get_mut(stop_id) && arrival_time < *val  {
-                    *val = arrival_time;
-                    parent_k[stop_id] = Some(Parent{arrival_time, stop_idx: boarding_stop_id, trip_idx: trip.idx});
-                }
-            }
-        }
-    }
-
-    fn update_crossings(&mut self, tau: &mut[Secs]) {
-        todo!()
+    fn et(&self, route: usize, stop_id: usize, tau: Secs) -> Option<usize> {
+        self.graph.raptor_routes[route].trips
+            .iter()
+            .map(|&ti| &self.graph.trips[ti])
+            .filter_map(|trip| {
+                let dep = self.graph.departure_at(trip.idx, stop_id)?;
+                if dep >= tau { Some((trip, dep)) } else { None }
+            })
+            .min_by_key(|&(_, dep)| dep)
+            .map(|(trip, _)| trip.idx)
     }
 
     pub fn query(&mut self, source_station: usize, target_station: usize, departure: Secs) -> Option<Journey> {
+        let max_transfers = 5;
         println!("source_station: {}, target_station: {}, departure: {}", source_station, target_station, departure);
 
         let from_stops = &self.graph.stations[source_station].stops;
         let to_stops = &self.graph.stations[target_station].stops;
 
-        let mut tau: Vec<Secs> = vec![Secs::MAX; self.graph.stops.len()];
-        for stop in from_stops {
-            tau[*stop] = departure;
-        }
-
+        let mut tau: Vec<Vec<Secs>> = vec![vec![Secs::MAX; self.graph.stops.len()]; max_transfers + 1];
+        let mut tau_best: Vec<Secs> = vec![Secs::MAX; self.graph.stops.len()];
         let mut parent: Vec<Option<Parent>> = vec![None; self.graph.stops.len()];
 
-        let max_transfers = 5;
-        for _k in 0..max_transfers {
-            let tau_prev = tau.clone();
-            for route in &self.graph.raptor_routes {
-                self.scan_route(route, &tau_prev, &mut tau, &mut parent);
-            }
-            // self.update_crossings(&mut tau);
+        let mut Q: HashMap<usize, usize> = HashMap::new();
+        let mut marked_stops: HashSet<usize> = HashSet::new();
+
+        for stop in from_stops {
+            tau[0][*stop] = departure;
+            marked_stops.insert(*stop);
         }
 
-        let &target_stop = to_stops.iter().min_by_key(|&&s| tau[s])?;
-        let arrival = tau[target_stop];
+        for k in 1..max_transfers+1 {
+            Q.clear();
+            for p in &marked_stops {
+                for (r, p_idx) in &self.graph.rroutes_by_stop[*p] {
+                    let p1_idx = Q.get(r).unwrap_or(&usize::MAX);
+                    if *p_idx < *p1_idx {
+                        Q.insert(*r, *p_idx);
+                    }
+                }
+            }
+            marked_stops.clear();
+
+            for (r, p_idx) in &Q {
+                let mut t: Option<(usize, usize)> = None;
+
+                let route_stops = &self.graph.raptor_routes[*r].stops;
+                for pi in *p_idx..route_stops.len() {
+                    let p = route_stops[pi];
+                    let at = if t != None { self.graph.arrival_at(t.unwrap().0, p).unwrap() } else { Secs::MAX };
+
+                    if t != None {
+                        if at < min(tau_best[p], *to_stops.iter().filter_map(|&s| tau_best.get(s)).min().unwrap_or(&Secs::MAX)) {
+                            tau[k][p] = at;
+                            tau_best[p] = at;
+                            parent[p] = Some(Parent { arrival_time: at, trip_idx: t.unwrap().0, stop_idx: t.unwrap().1 });
+                            marked_stops.insert(p);
+                        }
+                    }
+
+                    if tau[k-1][p] <= at {
+                        t = self.et(*r, p, tau[k-1][p]).map(|t| (t, p));
+                    }
+                }
+            }
+
+          // TODO footpaths
+
+          if marked_stops.is_empty() {
+              break;
+          }
+        }
+
+        let &target_stop = to_stops.iter().min_by_key(|&&s| tau_best[s])?;
+        let arrival = tau_best[target_stop];
         if arrival == Secs::MAX {
             return None;
         }
 
         let mut legs: Vec<Leg> = Vec::new();
         let mut current_stop = target_stop;
+
         while !from_stops.iter().any(|&s| s == current_stop) {
-            let Some(p) = &parent[current_stop] else { break };
+            match &parent[current_stop] {
+                Some(p) => {
+                    let route_idx = self.graph.trips[p.trip_idx].route_idx;
 
-            let route_idx = self.graph.trips[p.trip_idx].route_idx;
-            let route_name = &self.graph.routes[route_idx].route_short_name;
-            let trip_headline = &self.graph.trips[p.trip_idx].trip_headsign;
-            legs.push(Leg::first(p.arrival_time, current_stop, self.graph.stops[current_stop].name.clone(), p.trip_idx, trip_headline.clone(), route_name.clone()));
-            let dep_time = self.graph.departure_at(p.trip_idx, p.stop_idx)?;
-            legs.push(Leg::first(dep_time, p.stop_idx, self.graph.stops[p.stop_idx].name.clone(), p.trip_idx, trip_headline.clone(), route_name.clone()));
+                    // Reconstruct the arrival (deboarding) leg
+                    legs.push(Leg::first(
+                        p.arrival_time,
+                        current_stop,
+                        self.graph.stops[current_stop].name.clone(),
+                        p.trip_idx,
+                        self.graph.trips[p.trip_idx].trip_headsign.clone(),
+                        self.graph.routes[route_idx].route_short_name.clone(),
+                    ));
 
-            current_stop = p.stop_idx;
+                    // Reconstruct the departure (boarding) leg
+                    let dep_time = self.graph.departure_at(p.trip_idx, p.stop_idx)?;
+                    legs.push(Leg::first(
+                        dep_time,
+                        p.stop_idx,
+                        self.graph.stops[p.stop_idx].name.clone(),
+                        p.trip_idx,
+                        self.graph.trips[p.trip_idx].trip_headsign.clone(),
+                        self.graph.routes[route_idx].route_short_name.clone(),
+                    ));
+
+                    current_stop = p.stop_idx;
+                }
+                None => break,
+            }
         }
         legs.reverse();
 
