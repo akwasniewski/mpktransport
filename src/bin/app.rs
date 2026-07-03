@@ -1,7 +1,7 @@
 use std::{env, path::Path};
 
 use anyhow::{Context, Result};
-use mpktransport::{app::App, footpaths, graph::Graph};
+use mpktransport::{app::App, footpaths::{self, Footpaths}, graph::Graph};
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
@@ -21,7 +21,13 @@ fn main() -> Result<()> {
     println!("  stops loaded: {}", graph.stops.len());
 
     let footpaths_path = footpaths::default_path(dir);
-    let footpaths = footpaths::load(&footpaths_path).context("Failed to load footpaths")?;
+    let footpaths = footpaths::load(&footpaths_path).unwrap_or_else(|err| {
+        eprintln!(
+            "Warning: failed to load footpaths from '{}': {err}. Continuing without footpaths.",
+            footpaths_path.display()
+        );
+        Footpaths::new()
+    });
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

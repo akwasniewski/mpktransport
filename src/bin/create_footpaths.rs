@@ -28,7 +28,7 @@ fn main() -> Result<()> {
             "Usage: {} <path/to/map.osm.pbf> <path/to/gtfs_directory> [prefix] [data_dir] [footpaths_csv]",
             args[0]
         );
-        eprintln!("Defaults: prefix=krakow, data_dir=<gtfs_directory parent>, footpaths_csv=<data_dir>/footpaths.csv");
+        eprintln!("Defaults: prefix=krakow, data_dir=<gtfs_directory>, footpaths_csv=<gtfs_directory>/footpaths.csv");
         eprintln!("Example: {} data/krakow.osm.pbf data/GTFS_KRK_T", args[0]);
         std::process::exit(1);
     }
@@ -47,7 +47,7 @@ fn main() -> Result<()> {
     let data_dir = args
         .get(4)
         .map(PathBuf::from)
-        .unwrap_or_else(|| gtfs_dir.parent().unwrap_or(gtfs_dir).to_path_buf());
+        .unwrap_or_else(|| gtfs_dir.to_path_buf());
     let footpaths_path = args
         .get(5)
         .map(PathBuf::from)

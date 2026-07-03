@@ -13,10 +13,7 @@ struct FootpathRow {
 }
 
 pub fn default_path(gtfs_dir: &Path) -> PathBuf {
-    gtfs_dir
-        .parent()
-        .unwrap_or(gtfs_dir)
-        .join("footpaths.csv")
+    gtfs_dir.join("footpaths.csv")
 }
 
 pub fn load(path: &Path) -> Result<Footpaths> {
