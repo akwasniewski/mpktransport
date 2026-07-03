@@ -7,7 +7,7 @@ fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
         eprintln!("Usage: {} <path/to/gtfs_directory>", args[0]);
-        eprintln!("Generate data files first with: cargo run --release --bin create_road_graph -- data/krakow.osm.pbf data/GTFS_KRK_T");
+        eprintln!("Generate data files first with: cargo run --release --bin create_footpaths data/krakow.osm.pbf data/GTFS_KRK_T");
         std::process::exit(1);
     }
 

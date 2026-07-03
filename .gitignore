@@ -1,2 +1,4 @@
 /target
 /data/*.pbf
+/data/.txt
+.DS_Store

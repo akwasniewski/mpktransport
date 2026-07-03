@@ -97,7 +97,7 @@ fn find_closest_road_node(stop: &Stop, road_graph: &RoadGraph) -> Option<usize> 
         .iter()
         .enumerate()
         .filter_map(|(idx, vertex)| {
-            let (lat, lon) = vertex.coords();
+            let (lat, lon) = vertex.coords;
             if !lat.is_finite() || !lon.is_finite() {
                 return None;
             }
