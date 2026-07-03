@@ -2,7 +2,7 @@ use egui::Stroke;
 use std::collections::HashSet;
 use walkers::{Map, lat_lon};
 
-use crate::app::{map_style, App, shapes_plugin::ShapeLinesPlugin, stop_plugin::StopPlugin};
+use crate::app::{map_style, App, MarkerId, shapes_plugin::ShapeLinesPlugin, stop_plugin::StopPlugin};
 
 impl App {
     pub(super) fn draw_map(&mut self, ui: &mut egui::Ui) {
@@ -17,15 +17,28 @@ impl App {
         let pointer = ctx.input(|i| i.pointer.hover_pos());
 
         let visible = self.visible_indices();
-        let stops_data: Vec<(f64, f64, String, usize, bool)> = visible
+        let mut stops_data: Vec<(f64, f64, String, MarkerId, bool)> = visible
             .iter()
             .filter_map(|&i| {
                 let s = &self.graph.stops[i];
-                Some((s.stop_lat?, s.stop_lon?, s.name.clone(), i, self.selected == Some(i)))
+                let id = MarkerId::Stop(i);
+                Some((s.stop_lat?, s.stop_lon?, s.name.clone(), id, self.selected == Some(id)))
             })
             .collect();
 
-        let clicked_cell = std::rc::Rc::new(std::cell::Cell::new(Option::<usize>::None));
+        let q = self.filter.to_lowercase();
+        for (bi, bar) in self.bars.bars.iter().enumerate() {
+            if !q.is_empty()
+                && !bar.name.to_lowercase().contains(&q)
+                && !bar.vicinity.to_lowercase().contains(&q)
+            {
+                continue;
+            }
+            let id = MarkerId::Bar(bi);
+            stops_data.push((bar.lat, bar.lon, bar.name.clone(), id, self.selected == Some(id)));
+        }
+
+        let clicked_cell = std::rc::Rc::new(std::cell::Cell::new(Option::<MarkerId>::None));
         let clicked_cell2 = clicked_cell.clone();
         let (endpoint_stops, transfer_stops) = self.route_highlighted_stops();
 
@@ -58,6 +71,11 @@ impl App {
         .with_plugin(stop_plugin);
 
         ui.add(map_widget);
+
+        if let Some(id) = clicked_cell.get() {
+            self.selected = Some(id);
+            self.selected_stop_lines.clear();
+        }
 
         ctx.request_repaint();
     }

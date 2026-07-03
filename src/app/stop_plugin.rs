@@ -1,11 +1,11 @@
 use walkers::{lat_lon, MapMemory, Plugin, Projector};
 
-use crate::app::map_style;
+use crate::app::{map_style, MarkerId};
 
 pub(super) struct StopPlugin {
-    pub(super) stops: Vec<(f64, f64, String, usize, bool)>,
+    pub(super) stops: Vec<(f64, f64, String, MarkerId, bool)>,
     pub(super) pointer: Option<egui::Pos2>,
-    pub(super) clicked_out: std::rc::Rc<std::cell::Cell<Option<usize>>>,
+    pub(super) clicked_out: std::rc::Rc<std::cell::Cell<Option<MarkerId>>>,
     pub(super) endpoint_stops: std::collections::HashSet<usize>,
     pub(super) transfer_stops: std::collections::HashSet<usize>,
 }
@@ -26,15 +26,21 @@ impl Plugin for StopPlugin {
             egui::pos2(v.x, v.y)
         };
 
-        for (lat, lon, name, idx, is_sel) in &self.stops {
+        for (lat, lon, name, id, is_sel) in &self.stops {
             let screen_pt = to_screen(*lat, *lon);
 
             if !response.rect.expand(12.0).contains(screen_pt) {
                 continue;
             }
 
-            let is_endpoint = self.endpoint_stops.contains(idx);
-            let is_transfer = self.transfer_stops.contains(idx);
+            let (is_endpoint, is_transfer, is_bar) = match id {
+                MarkerId::Stop(i) => (
+                    self.endpoint_stops.contains(i),
+                    self.transfer_stops.contains(i),
+                    false,
+                ),
+                MarkerId::Bar(_) => (false, false, true),
+            };
 
             let radius = if *is_sel || is_endpoint {
                 8.0_f32
@@ -54,6 +60,8 @@ impl Plugin for StopPlugin {
                 map_style::selected_fill()
             } else if hovered {
                 map_style::hovered_fill()
+            } else if is_bar {
+                map_style::bar_fill()
             } else {
                 map_style::default_stop_fill()
             };
@@ -88,7 +96,7 @@ impl Plugin for StopPlugin {
                 );
 
                 if primary_clicked {
-                    self.clicked_out.set(Some(*idx));
+                    self.clicked_out.set(Some(*id));
                 }
             }
         }
