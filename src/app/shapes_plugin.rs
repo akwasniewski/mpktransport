@@ -1,38 +1,60 @@
-use walkers::{Plugin, Projector, MapMemory, lat_lon};
-use egui::{Stroke, Shape, Ui, Response};
+use egui::{Response, Shape, Stroke, Ui};
+use walkers::{lat_lon, MapMemory, Plugin, Projector};
 
 pub struct ShapeLinesPlugin {
-    pub paths: Vec<Vec<(f64, f64)>>,
-    pub stroke: Stroke,
+    pub paths: Vec<(Vec<(f64, f64)>, Stroke, bool)>,
 }
 
 impl Plugin for ShapeLinesPlugin {
     fn run(
-        self: Box<Self>, 
-        ui: &mut Ui, 
-        response: &Response, 
-        projector: &Projector, 
-        _map_memory: &MapMemory
+        self: Box<Self>,
+        ui: &mut Ui,
+        response: &Response,
+        projector: &Projector,
+        _map_memory: &MapMemory,
     ) {
-        // We use with_clip_rect so that paths don't bleed outside the map's frame
         let painter = ui.painter().with_clip_rect(response.rect);
 
-        for path in &self.paths {
-            if path.len() < 2 { continue; }
+        for (path, stroke, dotted) in &self.paths {
+            if path.len() < 2 {
+                continue;
+            }
 
-            // Pinning fix: Most versions of walkers expect you to project the position,
-            // which gives a coordinate relative to the widget's screen space.
-        let points: Vec<egui::Pos2> = path
-            .iter()
-            .map(|&(lat, lon)| {
-                let relative_vec = projector.project(lat_lon(lat, lon));
-                // Convert Vec2 directly to Pos2
-                egui::Pos2::new(relative_vec.x, relative_vec.y)
-            })
-            .collect();
+            let points: Vec<egui::Pos2> = path
+                .iter()
+                .map(|&(lat, lon)| {
+                    let projected = projector.project(lat_lon(lat, lon));
+                    egui::pos2(projected.x, projected.y)
+                })
+                .collect();
 
-            // Render continuous line segments across coordinate arrays
-            painter.add(Shape::line(points, self.stroke));
+            if *dotted {
+                draw_dotted_path(&painter, &points, *stroke);
+            } else {
+                painter.add(Shape::line(points, *stroke));
+            }
+        }
+    }
+}
+
+fn draw_dotted_path(painter: &egui::Painter, points: &[egui::Pos2], stroke: Stroke) {
+    let radius = (stroke.width / 2.0).max(2.0);
+    let spacing = radius * 3.0;
+
+    for segment in points.windows(2) {
+        let start = segment[0];
+        let end = segment[1];
+        let delta = end - start;
+        let len = delta.length();
+        if len <= f32::EPSILON {
+            continue;
+        }
+
+        let steps = (len / spacing).ceil() as usize;
+        for step in 0..=steps {
+            let t = step as f32 / steps.max(1) as f32;
+            let point = start + delta * t;
+            painter.circle_filled(point, radius, stroke.color);
         }
     }
 }

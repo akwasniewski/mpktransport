@@ -1,6 +1,7 @@
 pub mod draw_map;
 pub mod stop_plugin;
 pub mod shapes_plugin;
+pub mod map_style;
 pub mod draw_stop_panel;
 pub mod route_search;
 
