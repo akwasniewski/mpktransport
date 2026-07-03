@@ -18,6 +18,18 @@ pub enum RoutingAlgorithm {
     Csa,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Time {
+    pub hour: u32,
+    pub minute: u32,
+}
+
+impl Time {
+    pub fn seconds(&self) -> u32 {
+        self.hour * 3600 + self.minute * 60
+    }
+}
+
 pub struct App {
     pub(super) graph: Graph,
     pub(super) footpaths: Footpaths,
@@ -30,6 +42,7 @@ pub struct App {
     // Route search state
     pub(super) route_from: String,
     pub(super) route_to: String,
+    pub(super) time: Time,
     pub(super) route_from_selected: Option<usize>,
     pub(super) route_to_selected: Option<usize>,
     pub(super) route_from_focused: bool,
@@ -59,6 +72,7 @@ impl App {
             map_memory,
             route_from: String::new(),
             route_to: String::new(),
+            time: Time { hour: 8, minute: 0 },
             route_from_selected: None,
             route_to_selected: None,
             route_from_focused: false,
