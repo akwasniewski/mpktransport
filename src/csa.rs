@@ -44,6 +44,10 @@ impl<'a> Csa<'a> {
         })
     }
 
+    // pub fn query_multiple_places(&self, source_places: &Vec<usize>, target_places: &Vec<usize>, source_time: Secs) -> Option<Journey> {
+    //     for 
+    // }
+
     pub fn query(&self, source_station: usize, target_station: usize, source_time: Secs) -> Option<Journey> {
         let mut s: Vec<Option<u32>> = vec![None; self.graph.stops.len()];
         for stop in &self.graph.stations[source_station].stops{

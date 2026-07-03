@@ -42,4 +42,32 @@ impl App {
         });
     }
 
+    pub fn draw_bar_panel(&self, ui: &mut egui::Ui, idx: usize) {
+        let bar = &self.bars.bars[idx];
+
+        ui.vertical(|ui| {
+            ui.heading(&bar.name);
+            ui.add_space(4.0);
+
+            if !bar.vicinity.is_empty() {
+                ui.label(&bar.vicinity);
+            }
+            ui.label(format!("Coordinates: {:.6}, {:.6}", bar.lat, bar.lon));
+
+            ui.separator();
+            ui.strong("Nearest stops:");
+
+            match self.bars.footpaths.get(&bar.place_id) {
+                Some(fps) => {
+                    for (stop_idx, walk) in fps {
+                        let name = &self.graph.stops[*stop_idx].name;
+                        ui.label(format!("{name} — {:.1} min walk", *walk as f64 / 60.0));
+                    }
+                }
+                None => {
+                    ui.weak("No nearby stops.");
+                }
+            }
+        });
+    }
 }

@@ -6,7 +6,7 @@ pub mod route_search;
 
 use walkers::{HttpTiles, MapMemory, lat_lon};
 
-use crate::{graph::Graph, journey::Journey};
+use crate::{bar_stops_graph::BarsStops, graph::Graph, journey::Journey};
 
 #[derive(PartialEq)]
 pub(super) enum Tab { Map, Routes }
@@ -17,10 +17,19 @@ pub enum RoutingAlgorithm {
     Csa,
 }
 
+/// A clickable marker on the map. Keeps bar ids in a separate namespace from
+/// stop ids, so `Bar(5)` and `Stop(5)` never collide.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MarkerId {
+    Stop(usize),
+    Bar(usize),
+}
+
 pub struct App {
     pub(super) graph: Graph,
+    pub(super) bars: BarsStops,
     pub(super) filter: String,
-    pub(super) selected: Option<usize>,
+    pub(super) selected: Option<MarkerId>,
     pub(super) selected_stop_lines: Vec<String>,
     pub(super) tab: Tab,
     pub(super) tiles: HttpTiles,
@@ -37,7 +46,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(graph: Graph, ctx: egui::Context) -> Self {
+    pub fn new(graph: Graph, bars: BarsStops, ctx: egui::Context) -> Self {
         let centre = graph.centre().unwrap_or((50.06, 19.94));
         let tiles = HttpTiles::new(walkers::sources::OpenStreetMap, ctx);
         let mut map_memory = MapMemory::default();
@@ -49,6 +58,7 @@ impl App {
 
     Self {
         graph,
+        bars,
         filter: String::new(),
         selected: None,
         selected_stop_lines: Vec::new(),
@@ -140,8 +150,10 @@ impl eframe::App for App {
                             self.draw_route_search(ui);
                         }
                         Tab::Map => {
-                            if let Some(idx) = self.selected {
-                                self.draw_stop_panel(ui, idx);
+                            match self.selected {
+                                Some(MarkerId::Stop(idx)) => self.draw_stop_panel(ui, idx),
+                                Some(MarkerId::Bar(idx)) => self.draw_bar_panel(ui, idx),
+                                None => {}
                             }
                         }
                     }

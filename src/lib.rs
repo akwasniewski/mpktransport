@@ -1,4 +1,5 @@
 pub mod graph;
+pub mod bar_stops_graph;
 pub mod raptor;
 pub mod csa;
 pub mod journey;

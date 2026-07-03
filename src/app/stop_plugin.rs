@@ -1,10 +1,12 @@
 use walkers::{lat_lon, MapMemory, Plugin, Projector};
 
+use crate::app::MarkerId;
+
 pub(super) struct StopPlugin {
-    pub(super) stops: Vec<(f64, f64, String, usize, bool)>,
+    pub(super) stops: Vec<(f64, f64, String, MarkerId, bool)>,
     pub(super) pointer: Option<egui::Pos2>,
-    pub(super) clicked_out: std::rc::Rc<std::cell::Cell<Option<usize>>>,
-    pub(super) highlighted: std::collections::HashSet<usize>,  // ← add this
+    pub(super) clicked_out: std::rc::Rc<std::cell::Cell<Option<MarkerId>>>,
+    pub(super) highlighted: std::collections::HashSet<MarkerId>,
 }
 
 impl Plugin for StopPlugin {
@@ -23,14 +25,15 @@ impl Plugin for StopPlugin {
             egui::pos2(v.x, v.y)
         };
 
-        for (lat, lon, name, idx, is_sel) in &self.stops {
+        for (lat, lon, name, id, is_sel) in &self.stops {
             let screen_pt = to_screen(*lat, *lon);
 
             if !response.rect.expand(12.0).contains(screen_pt) {
                 continue;
             }
 
-            let is_highlighted = self.highlighted.contains(idx);
+            let is_highlighted = self.highlighted.contains(id);
+            let is_bar = matches!(id, MarkerId::Bar(_));
 
             let radius = if *is_sel || is_highlighted { 8.0_f32 } else { 5.5_f32 };
             let dist   = self.pointer.map_or(f32::MAX, |p| p.distance(screen_pt));
@@ -42,8 +45,10 @@ impl Plugin for StopPlugin {
                 egui::Color32::from_rgb(255, 180, 0)   // amber — selected
             } else if hovered {
                 egui::Color32::from_rgb(90, 200, 255)  // light blue — hovered
+            } else if is_bar {
+                egui::Color32::from_rgb(160, 70, 200)  // purple — bar/pub
             } else {
-                egui::Color32::from_rgb(30, 120, 220)  // blue — default
+                egui::Color32::from_rgb(30, 120, 220)  // blue — stop
             };
 
             painter.circle(screen_pt, radius, fill, egui::Stroke::new(1.5, egui::Color32::WHITE));
@@ -69,7 +74,7 @@ impl Plugin for StopPlugin {
                 );
 
                 if primary_clicked {
-                    self.clicked_out.set(Some(*idx));
+                    self.clicked_out.set(Some(*id));
                 }
             }
         }
