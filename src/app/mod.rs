@@ -6,7 +6,7 @@ pub mod route_search;
 
 use walkers::{HttpTiles, MapMemory, lat_lon};
 
-use crate::{graph::Graph, journey::Journey};
+use crate::{footpaths::Footpaths, graph::Graph, journey::Journey};
 
 #[derive(PartialEq)]
 pub(super) enum Tab { Map, Routes }
@@ -19,6 +19,7 @@ pub enum RoutingAlgorithm {
 
 pub struct App {
     pub(super) graph: Graph,
+    pub(super) footpaths: Footpaths,
     pub(super) filter: String,
     pub(super) selected: Option<usize>,
     pub(super) selected_stop_lines: Vec<String>,
@@ -37,7 +38,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(graph: Graph, ctx: egui::Context) -> Self {
+    pub fn new(graph: Graph, footpaths: Footpaths, ctx: egui::Context) -> Self {
         let centre = graph.centre().unwrap_or((50.06, 19.94));
         let tiles = HttpTiles::new(walkers::sources::OpenStreetMap, ctx);
         let mut map_memory = MapMemory::default();
@@ -46,25 +47,24 @@ impl App {
             .unwrap_or_else(|_| map_memory.set_zoom(16.0).unwrap());
         map_memory.center_at(lat_lon(centre.0, centre.1));
 
-
-    Self {
-        graph,
-        filter: String::new(),
-        selected: None,
-        selected_stop_lines: Vec::new(),
-        tab: Tab::Map,
-        tiles,
-        map_memory,
-        route_from: String::new(),
-        route_to: String::new(),
-        route_from_selected: None,
-        route_to_selected: None,
-        route_from_focused: false,
-        route_to_focused: false,
-        route_result: None,
-        routing_algorithm: RoutingAlgorithm::Raptor,
-    }
-
+        Self {
+            graph,
+            footpaths,
+            filter: String::new(),
+            selected: None,
+            selected_stop_lines: Vec::new(),
+            tab: Tab::Map,
+            tiles,
+            map_memory,
+            route_from: String::new(),
+            route_to: String::new(),
+            route_from_selected: None,
+            route_to_selected: None,
+            route_from_focused: false,
+            route_to_focused: false,
+            route_result: None,
+            routing_algorithm: RoutingAlgorithm::Raptor,
+        }
     }
 
     pub(super) fn visible_indices(&self) -> Vec<usize> {
@@ -86,8 +86,6 @@ impl App {
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
-        let ctx = ui.ctx().clone();
-
         // ── Top toolbar ─────────────────────────────────────────────────────
         egui::Panel::top("toolbar").show_inside(ui, |ui| {
             ui.add_space(6.0);

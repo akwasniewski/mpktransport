@@ -1,5 +1,5 @@
-
-use crate::graph::{Graph};
+use crate::footpaths::Footpaths;
+use crate::graph::Graph;
 use crate::journey::{Journey, Leg};
 use crate::utils::Secs;
 use std::cmp::min;
@@ -8,34 +8,26 @@ use std::vec;
 
 pub struct Raptor<'a> {
     graph: &'a Graph,
-    footpaths: HashMap<(usize, usize), Secs>,
+    footpaths: &'a Footpaths,
 }
 
 #[derive(Debug, Clone)]
-struct Parent{
-    arrival_time: Secs,
-    stop_idx: usize,
-    trip_idx: usize
-}
-
-fn gen_crossings(graph: &Graph) -> HashMap<(usize, usize), Secs> {
-    let mut crossings = HashMap::new();
-    for c1 in &graph.stops {
-        for c2 in &graph.stops {
-            if c1.station == c2.station {
-                crossings.insert((c1.idx, c2.idx), 0);
-            }
-        }
-    }
-    crossings
+enum Parent {
+    Trip {
+        arrival_time: Secs,
+        boarding_stop: usize,
+        trip_idx: usize,
+    },
+    Walk {
+        arrival_time: Secs,
+        from_stop: usize,
+        duration: Secs,
+    },
 }
 
 impl<'a> Raptor<'a> {
-    pub fn new(graph: &'a Graph) -> Self {
-        Self {
-            graph,
-            footpaths: gen_crossings(graph),
-        }
+    pub fn new(graph: &'a Graph, footpaths: &'a Footpaths) -> Self {
+        Self { graph, footpaths }
     }
 
     fn et(&self, route: usize, stop_id: usize, tau: Secs) -> Option<usize> {
@@ -93,7 +85,11 @@ impl<'a> Raptor<'a> {
                         if at < min(tau_best[p], *to_stops.iter().filter_map(|&s| tau_best.get(s)).min().unwrap_or(&Secs::MAX)) {
                             tau[k][p] = at;
                             tau_best[p] = at;
-                            parent[p] = Some(Parent { arrival_time: at, trip_idx: t.unwrap().0, stop_idx: t.unwrap().1 });
+                            parent[p] = Some(Parent::Trip {
+                                arrival_time: at,
+                                trip_idx: t.unwrap().0,
+                                boarding_stop: t.unwrap().1,
+                            });
                             marked_stops.insert(p);
                         }
                     }
@@ -104,11 +100,27 @@ impl<'a> Raptor<'a> {
                 }
             }
 
-          // TODO footpaths
+            for from in &marked_stops.clone() {
+                if let Some(footpaths) = self.footpaths.get(from) {
+                    for (to, time) in footpaths {
+                        let arrival = tau[k][*from] + *time;
+                        if arrival < tau[k][*to] && arrival < tau_best[*to] {
+                            tau[k][*to] = arrival;
+                            tau_best[*to] = arrival;
+                            parent[*to] = Some(Parent::Walk {
+                                arrival_time: arrival,
+                                from_stop: *from,
+                                duration: *time,
+                            });
+                            marked_stops.insert(*to);
+                        }
+                    }
+                }
+            }
 
-          if marked_stops.is_empty() {
-              break;
-          }
+            if marked_stops.is_empty() {
+                break;
+            }
         }
 
         let &target_stop = to_stops.iter().min_by_key(|&&s| tau_best[s])?;
@@ -122,31 +134,31 @@ impl<'a> Raptor<'a> {
 
         while !from_stops.iter().any(|&s| s == current_stop) {
             match &parent[current_stop] {
-                Some(p) => {
-                    let route_idx = self.graph.trips[p.trip_idx].route_idx;
+                Some(Parent::Trip {
+                    arrival_time,
+                    boarding_stop,
+                    trip_idx,
+                }) => {
+                    let route_idx = self.graph.trips[*trip_idx].route_idx;
+                    let trip_headsign = &self.graph.trips[*trip_idx].trip_headsign;
+                    let route_name = &self.graph.routes[route_idx].route_short_name;
 
-                    // Reconstruct the arrival (deboarding) leg
-                    legs.push(Leg::first(
-                        p.arrival_time,
-                        current_stop,
-                        self.graph.stops[current_stop].name.clone(),
-                        p.trip_idx,
-                        self.graph.trips[p.trip_idx].trip_headsign.clone(),
-                        self.graph.routes[route_idx].route_short_name.clone(),
-                    ));
+                    legs.push(Leg::first(*arrival_time, current_stop, self.graph.stops[current_stop].name.clone(), *trip_idx, trip_headsign.clone(), route_name.clone()));
 
-                    // Reconstruct the departure (boarding) leg
-                    let dep_time = self.graph.departure_at(p.trip_idx, p.stop_idx)?;
-                    legs.push(Leg::first(
-                        dep_time,
-                        p.stop_idx,
-                        self.graph.stops[p.stop_idx].name.clone(),
-                        p.trip_idx,
-                        self.graph.trips[p.trip_idx].trip_headsign.clone(),
-                        self.graph.routes[route_idx].route_short_name.clone(),
-                    ));
+                    let dep_time = self.graph.departure_at(*trip_idx, *boarding_stop)?;
+                    legs.push(Leg::first(dep_time, *boarding_stop, self.graph.stops[*boarding_stop].name.clone(), *trip_idx, trip_headsign.clone(), route_name.clone()));
 
-                    current_stop = p.stop_idx;
+                    current_stop = *boarding_stop;
+                }
+                Some(Parent::Walk {
+                    arrival_time,
+                    from_stop,
+                    duration,
+                }) => {
+                    legs.push(Leg::second(*arrival_time, current_stop, self.graph.stops[current_stop].name.clone()));
+                    legs.push(Leg::second(arrival_time - *duration, *from_stop, self.graph.stops[*from_stop].name.clone()));
+
+                    current_stop = *from_stop;
                 }
                 None => break,
             }
