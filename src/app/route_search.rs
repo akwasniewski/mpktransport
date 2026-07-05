@@ -305,7 +305,7 @@ impl App {
                                                 ui.group(|ui| {
                                                     ui.set_width(ui.available_width());
                                                     ui.horizontal(|ui| {
-                                                        let walk_badge = egui::RichText::new("🧍 Wait ")
+                                                        let walk_badge = egui::RichText::new(" Wait ")
                                                             .background_color(ui.visuals().widgets.inactive.bg_fill)
                                                             .color(ui.visuals().widgets.active.text_color())
                                                             .strong();
@@ -355,7 +355,7 @@ impl App {
                                                     }
 
                                                     ui.horizontal(|ui| {
-                                                        let walk_badge = egui::RichText::new(" 🚶 Walk ")
+                                                        let walk_badge = egui::RichText::new(" Walk ")
                                                             .background_color(ui.visuals().widgets.inactive.bg_fill)
                                                             .color(ui.visuals().widgets.active.text_color())
                                                             .strong();
@@ -436,7 +436,7 @@ impl App {
                                                         ui.add_space(15.0);
                                                         let transfer_color = egui::Color32::from_rgb(230, 140, 10);
                                                         ui.label(egui::RichText::new("🔄").color(transfer_color));
-                                                        ui.label(egui::RichText::new(format!("Wait {} min for next vehicle", m)).color(transfer_color).small());
+                                                        ui.label(egui::RichText::new(format!("Wait {} min", m)).color(transfer_color).small());
                                                     });
                                                     ui.add_space(4.0);
                                                 }
