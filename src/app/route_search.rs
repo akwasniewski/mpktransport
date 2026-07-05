@@ -484,8 +484,10 @@ impl App {
             RoutingAlgorithm::Raptor => {
                 let mut raptor = Raptor::new(&self.graph);
                 for &(s, a) in &sources {
+                    let fs = self.graph.stops[s].station;
                     for &(t, b) in &targets {
-                        if let Some(j) = raptor.query(s, t, depart.saturating_add(a)) {
+                        let ts = self.graph.stops[t].station;
+                        if let Some(j) = raptor.query(fs, ts, depart.saturating_add(a)) {
                             let eff = j.arrival.saturating_add(b);
                             if best.as_ref().map_or(true, |(_, be)| eff < *be) {
                                 best = Some((j, eff));

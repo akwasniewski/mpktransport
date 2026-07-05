@@ -59,6 +59,7 @@ impl App {
             .map(|(idx, path)| (path, map_style::route_stroke(idx, route_count), false))
             .collect();
         active_paths.extend(self.get_active_walking_paths());
+        active_paths.extend(self.get_bar_walking_paths());
         let shapes_plugin = ShapeLinesPlugin { paths: active_paths };
 
         // Combine both plugins chain-style inside walkers::Map builder configuration
@@ -125,6 +126,36 @@ impl App {
 
         transfer_stops.retain(|stop| !endpoint_stops.contains(stop));
         (endpoint_stops, transfer_stops)
+    }
+
+    fn get_bar_walking_paths(&self) -> Vec<(Vec<(f64, f64)>, Stroke, bool)> {
+        let mut paths = Vec::new();
+
+        let Some((from, to, Some(journey))) = &self.route_result else {
+            return paths;
+        };
+
+        let stop_coord = |idx: usize| {
+            self.graph.stops.get(idx).and_then(|s| Some((s.stop_lat?, s.stop_lon?)))
+        };
+
+        if let Place::Bar(i) = from {
+            if let (Some(bar), Some(first)) = (self.bars.bars.get(*i), journey.legs.first()) {
+                if let Some(coord) = stop_coord(first.stop_idx) {
+                    paths.push((vec![(bar.lat, bar.lon), coord], map_style::walking_stroke(0, 1), true));
+                }
+            }
+        }
+
+        if let Place::Bar(i) = to {
+            if let (Some(bar), Some(last)) = (self.bars.bars.get(*i), journey.legs.last()) {
+                if let Some(coord) = stop_coord(last.stop_idx) {
+                    paths.push((vec![coord, (bar.lat, bar.lon)], map_style::walking_stroke(0, 1), true));
+                }
+            }
+        }
+
+        paths
     }
 
     fn get_active_walking_paths(&self) -> Vec<(Vec<(f64, f64)>, Stroke, bool)> {
