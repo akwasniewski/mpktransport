@@ -256,97 +256,195 @@ impl App {
                         egui::ScrollArea::vertical()
                             .id_source("journey_legs_scroll")
                             .show(ui, |ui| {
-                                let mut legs_iter = j.legs.windows(2).enumerate().peekable();
+                                let legs = &j.legs;
+                                let n = legs.len();
 
-                                while let Some((idx, pair)) = legs_iter.next() {
-                                    let start_leg = &pair[0];
-                                    let end_leg   = &pair[1];
+                                if n >= 2 {
+                                    let num_segs = n - 1;
 
-                                    let duration_secs = end_leg.time.saturating_sub(start_leg.time);
-                                    let duration_mins = duration_secs / 60;
+                                    // Same-stop "wait" legs are explicit entries in the data
+                                    // (e.g. 08:17→08:17), not just gaps between windows, so we
+                                    // classify each segment and merge neighboring Wait segments
+                                    // into an adjacent Walk (or Ride) block instead of always
+                                    // rendering them as their own boxes.
+                                    #[derive(Clone, Copy, PartialEq)]
+                                    enum SegKind { Wait, Walk, Ride }
 
-                                    if start_leg.stop_name == end_leg.stop_name {
-                                        ui.group(|ui| {
-                                            ui.set_width(ui.available_width());
-                                            ui.horizontal(|ui| {
-                                                let walk_badge = egui::RichText::new("🧍 Wait ")
-                                                    .background_color(ui.visuals().widgets.inactive.bg_fill)
-                                                    .color(ui.visuals().widgets.active.text_color())
-                                                    .strong();
-                                                ui.label(walk_badge);
-                                                ui.label(egui::RichText::new(format!("Transfer inside {}", start_leg.stop_name)).strong());
-                                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                                    ui.label(egui::RichText::new(format!("{} min", duration_mins)).weak().small());
-                                                });
-                                            });
-                                            ui.add_space(2.0);
-                                            ui.horizontal(|ui| {
-                                                ui.label(egui::RichText::new(format!("  {} → {}", fmt_time(start_leg.time), fmt_time(end_leg.time))).monospace().weak().small());
-                                            });
-                                        });
-                                    } else if start_leg.is_walk {
-                                        ui.group(|ui| {
-                                            ui.set_width(ui.available_width());
-                                            ui.horizontal(|ui| {
-                                                let walk_badge = egui::RichText::new(" 🚶 Walk ")
-                                                    .background_color(ui.visuals().widgets.inactive.bg_fill)
-                                                    .color(ui.visuals().widgets.active.text_color())
-                                                    .strong();
-                                                ui.label(walk_badge);
-                                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                                    ui.label(egui::RichText::new(format!("{} min", duration_mins)).weak().small());
-                                                });
-                                            });
-                                            ui.add_space(4.0);
-                                            ui.horizontal(|ui| {
-                                                ui.label(egui::RichText::new(format!("• {}", fmt_time(start_leg.time))).monospace().weak());
-                                                ui.label(&start_leg.stop_name);
-                                            });
-                                            ui.horizontal(|ui| {
-                                                ui.label(egui::RichText::new(format!("• {}", fmt_time(end_leg.time))).monospace().weak());
-                                                ui.label(&end_leg.stop_name);
-                                            });
-                                        });
-                                    } else {
-                                        ui.group(|ui| {
-                                            ui.set_width(ui.available_width());
-                                            ui.horizontal(|ui| {
-                                                let line_badge = egui::RichText::new(format!(" {} ", start_leg.clone().route_name.unwrap_or_else(|| "Unknown route".to_string())))
-                                                    .background_color(ui.visuals().widgets.active.bg_fill)
-                                                    .color(ui.visuals().widgets.active.text_color())
-                                                    .strong();
-                                                ui.label(line_badge);
-                                                ui.label(egui::RichText::new(start_leg.clone().trip_headline.unwrap_or_else(|| "Unknown direction".to_string())).weak().italics());
-                                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                                    ui.label(egui::RichText::new(format!("{} min", duration_mins)).weak().small());
-                                                });
-                                            });
-                                            ui.add_space(4.0);
-                                            ui.horizontal(|ui| {
-                                                ui.label(egui::RichText::new(format!("• {}", fmt_time(start_leg.time))).monospace().weak());
-                                                ui.label(&start_leg.stop_name);
-                                            });
-                                            ui.horizontal(|ui| {
-                                                ui.label(egui::RichText::new(format!("• {}", fmt_time(end_leg.time))).monospace().weak());
-                                                ui.label(&end_leg.stop_name);
-                                            });
-                                        });
-                                    }
+                                    let seg_kind = |i: usize| -> SegKind {
+                                        let s = &legs[i];
+                                        let e = &legs[i + 1];
+                                        if s.stop_name == e.stop_name {
+                                            SegKind::Wait
+                                        } else if s.is_walk {
+                                            SegKind::Walk
+                                        } else {
+                                            SegKind::Ride
+                                        }
+                                    };
+                                    let seg_mins = |i: usize| -> u32 {
+                                        legs[i + 1].time.saturating_sub(legs[i].time) / 60
+                                    };
 
-                                    if let Some((_, next_pair)) = legs_iter.peek() {
-                                        let next_start_leg = &next_pair[0];
-                                        if next_start_leg.time > end_leg.time || end_leg.trip_idx != next_start_leg.trip_idx {
-                                            let changeover_secs = next_start_leg.time.saturating_sub(end_leg.time);
-                                            let changeover_mins = changeover_secs / 60;
-                                            if changeover_mins > 0 && start_leg.stop_name != end_leg.stop_name {
-                                                ui.add_space(4.0);
-                                                ui.horizontal(|ui| {
-                                                    ui.add_space(15.0);
-                                                    let transfer_color = egui::Color32::from_rgb(230, 140, 10);
-                                                    ui.label(egui::RichText::new("🔄").color(transfer_color));
-                                                    ui.label(egui::RichText::new(format!("Wait {} min for next vehicle", changeover_mins)).color(transfer_color).small());
+                                    let mut i = 0usize;
+                                    while i < num_segs {
+                                        match seg_kind(i) {
+                                            SegKind::Wait => {
+                                                let mins = seg_mins(i);
+                                                let next_is_walk = i + 1 < num_segs && seg_kind(i + 1) == SegKind::Walk;
+
+                                                // Zero-length waits are no-ops; waits directly
+                                                // adjacent to a walk get absorbed into that
+                                                // walk's block instead of standing alone.
+                                                if mins == 0 || next_is_walk {
+                                                    i += 1;
+                                                    continue;
+                                                }
+
+                                                let start_leg = &legs[i];
+                                                let end_leg = &legs[i + 1];
+                                                ui.group(|ui| {
+                                                    ui.set_width(ui.available_width());
+                                                    ui.horizontal(|ui| {
+                                                        let walk_badge = egui::RichText::new("🧍 Wait ")
+                                                            .background_color(ui.visuals().widgets.inactive.bg_fill)
+                                                            .color(ui.visuals().widgets.active.text_color())
+                                                            .strong();
+                                                        ui.label(walk_badge);
+                                                        ui.label(egui::RichText::new(format!("Transfer inside {}", start_leg.stop_name)).strong());
+                                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                            ui.label(egui::RichText::new(format!("{} min", mins)).weak().small());
+                                                        });
+                                                    });
+                                                    ui.add_space(2.0);
+                                                    ui.horizontal(|ui| {
+                                                        ui.label(egui::RichText::new(format!("  {} → {}", fmt_time(start_leg.time), fmt_time(end_leg.time))).monospace().weak().small());
+                                                    });
                                                 });
-                                                ui.add_space(4.0);
+                                                i += 1;
+                                            }
+                                            SegKind::Walk => {
+                                                let walk_mins = seg_mins(i);
+                                                let start_leg = &legs[i];
+                                                let end_leg = &legs[i + 1];
+
+                                                let wait_before = if i > 0 && seg_kind(i - 1) == SegKind::Wait {
+                                                    let m = seg_mins(i - 1);
+                                                    if m > 0 { Some(m) } else { None }
+                                                } else {
+                                                    None
+                                                };
+                                                let wait_after = if i + 1 < num_segs && seg_kind(i + 1) == SegKind::Wait {
+                                                    let m = seg_mins(i + 1);
+                                                    if m > 0 { Some(m) } else { None }
+                                                } else {
+                                                    None
+                                                };
+
+                                                ui.group(|ui| {
+                                                    ui.set_width(ui.available_width());
+
+                                                    if let Some(m) = wait_before {
+                                                        ui.horizontal(|ui| {
+                                                            let transfer_color = egui::Color32::from_rgb(230, 140, 10);
+                                                            ui.label(egui::RichText::new("🔄").color(transfer_color));
+                                                            ui.label(egui::RichText::new(format!("Wait {} min, then walk", m)).color(transfer_color).small());
+                                                        });
+                                                        ui.add_space(4.0);
+                                                        ui.separator();
+                                                        ui.add_space(4.0);
+                                                    }
+
+                                                    ui.horizontal(|ui| {
+                                                        let walk_badge = egui::RichText::new(" 🚶 Walk ")
+                                                            .background_color(ui.visuals().widgets.inactive.bg_fill)
+                                                            .color(ui.visuals().widgets.active.text_color())
+                                                            .strong();
+                                                        ui.label(walk_badge);
+                                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                            ui.label(egui::RichText::new(format!("{} min", walk_mins)).weak().small());
+                                                        });
+                                                    });
+                                                    ui.add_space(4.0);
+                                                    ui.horizontal(|ui| {
+                                                        ui.label(egui::RichText::new(format!("• {}", fmt_time(start_leg.time))).monospace().weak());
+                                                        ui.label(&start_leg.stop_name);
+                                                    });
+                                                    ui.horizontal(|ui| {
+                                                        ui.label(egui::RichText::new(format!("• {}", fmt_time(end_leg.time))).monospace().weak());
+                                                        ui.label(&end_leg.stop_name);
+                                                    });
+
+                                                    if let Some(m) = wait_after {
+                                                        ui.add_space(4.0);
+                                                        ui.separator();
+                                                        ui.add_space(2.0);
+                                                        ui.horizontal(|ui| {
+                                                            let transfer_color = egui::Color32::from_rgb(230, 140, 10);
+                                                            ui.label(egui::RichText::new("🔄").color(transfer_color));
+                                                            ui.label(egui::RichText::new(format!("Wait {} min", m)).color(transfer_color).small());
+                                                        });
+                                                    }
+                                                });
+
+                                                i += 1;
+                                                if wait_after.is_some() {
+                                                    i += 1; // skip the wait segment we just absorbed
+                                                }
+                                            }
+                                            SegKind::Ride => {
+                                                let ride_mins = seg_mins(i);
+                                                let start_leg = &legs[i];
+                                                let end_leg = &legs[i + 1];
+
+                                                ui.group(|ui| {
+                                                    ui.set_width(ui.available_width());
+                                                    ui.horizontal(|ui| {
+                                                        let line_badge = egui::RichText::new(format!(" {} ", start_leg.clone().route_name.unwrap_or_else(|| "Unknown route".to_string())))
+                                                            .background_color(ui.visuals().widgets.active.bg_fill)
+                                                            .color(ui.visuals().widgets.active.text_color())
+                                                            .strong();
+                                                        ui.label(line_badge);
+                                                        ui.label(egui::RichText::new(start_leg.clone().trip_headline.unwrap_or_else(|| "Unknown direction".to_string())).weak().italics());
+                                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                            ui.label(egui::RichText::new(format!("{} min", ride_mins)).weak().small());
+                                                        });
+                                                    });
+                                                    ui.add_space(4.0);
+                                                    ui.horizontal(|ui| {
+                                                        ui.label(egui::RichText::new(format!("• {}", fmt_time(start_leg.time))).monospace().weak());
+                                                        ui.label(&start_leg.stop_name);
+                                                    });
+                                                    ui.horizontal(|ui| {
+                                                        ui.label(egui::RichText::new(format!("• {}", fmt_time(end_leg.time))).monospace().weak());
+                                                        ui.label(&end_leg.stop_name);
+                                                    });
+                                                });
+
+                                                let wait_after = if i + 1 < num_segs && seg_kind(i + 1) == SegKind::Wait {
+                                                    let m = seg_mins(i + 1);
+                                                    if m > 0 { Some(m) } else { None }
+                                                } else {
+                                                    None
+                                                };
+
+                                                // Riding then waiting stays a separate line: you
+                                                // got off the vehicle, then you're standing
+                                                // around — a distinct event from the ride itself.
+                                                if let Some(m) = wait_after {
+                                                    ui.add_space(4.0);
+                                                    ui.horizontal(|ui| {
+                                                        ui.add_space(15.0);
+                                                        let transfer_color = egui::Color32::from_rgb(230, 140, 10);
+                                                        ui.label(egui::RichText::new("🔄").color(transfer_color));
+                                                        ui.label(egui::RichText::new(format!("Wait {} min for next vehicle", m)).color(transfer_color).small());
+                                                    });
+                                                    ui.add_space(4.0);
+                                                }
+
+                                                i += 1;
+                                                if wait_after.is_some() {
+                                                    i += 1;
+                                                }
                                             }
                                         }
                                     }
