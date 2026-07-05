@@ -134,6 +134,11 @@ fn compute_footpaths(graph: &Graph, road_graph: &RoadGraph) -> Vec<FootpathRow> 
     for &(from_stop, from_road_node) in &road_stops {
         for &(to_stop, to_road_node) in &road_stops {
             if from_stop == to_stop || from_road_node == to_road_node {
+                footpaths.push(FootpathRow { 
+                    from_stop,
+                    to_stop,
+                    time_secs: 30, // minimum interchange 30 seconds
+                });
                 continue;
             }
 
