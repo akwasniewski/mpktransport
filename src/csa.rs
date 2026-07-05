@@ -27,16 +27,20 @@ impl<'a> Csa<'a> {
         while let Some(cur_j) = &j[cur_stop]{
             let cur_c_enter = &self.graph.connections[cur_j.c_enter];
             let cur_c_exit = &self.graph.connections[cur_j.c_exit];
-
+            if cur_stop != cur_c_exit.arr_stop{ 
+                legs.push(Leg::second(cur_c_exit.arr_time, cur_stop, self.graph.stops[cur_stop].name.clone()));
+                legs.push(Leg::second(cur_c_exit.arr_time - cur_j.f_dur, cur_c_exit.arr_stop, self.graph.stops[cur_c_exit.arr_stop].name.clone()));
+            }
             let route_idx = self.graph.trips[cur_c_exit.trip_idx].route_idx;
     legs.push(Leg::first(cur_c_exit.arr_time, cur_c_exit.arr_stop, self.graph.stops[cur_c_exit.arr_stop].name.clone(), cur_c_exit.trip_idx, self.graph.trips[cur_c_exit.trip_idx].trip_headsign.clone(), self.graph.routes[route_idx].route_short_name.clone()));
 
 
             let route_idx = self.graph.trips[cur_c_enter.trip_idx].route_idx;
             legs.push(Leg::first(cur_c_enter.dep_time, cur_c_enter.dep_stop, self.graph.stops[cur_c_enter.dep_stop].name.clone(), cur_c_enter.trip_idx, self.graph.trips[cur_c_enter.trip_idx].trip_headsign.clone(),  self.graph.routes[route_idx].route_short_name.clone()));
-   
+
             cur_stop = self.graph.connections[cur_j.c_enter].dep_stop;
         }
+        
         legs.reverse();
         Some(Journey{
             legs,
