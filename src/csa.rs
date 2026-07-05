@@ -54,39 +54,37 @@ impl<'a> Csa<'a> {
 
         let mut j: Vec<Option<JourneyMarker>> = vec![None; self.graph.stops.len()];
         let c0 = self.graph.connections.partition_point(|x| x.dep_time<source_time);
+        let mut best_target_arrival: Option<(usize, Secs)> = None;
+
         for c_idx in c0..self.graph.connections.len(){
             let c = &self.graph.connections[c_idx];
-            
-            // that is not the ultimate solution, but it works for now
-            for stop in &self.graph.stations[target_station].stops{
-                if s[*stop].is_some_and(|target_arrival| target_arrival <= c.dep_time) {
-                    break; 
-                }
-            }
-       
+
+            if best_target_arrival.is_some_and(|best_arr| best_arr.1 <= c.dep_time){
+                break;
+            }       
 
             if t[c.trip_idx].is_some() || s[c.dep_stop].is_some_and(|dep_arrival| dep_arrival <= c.dep_time){
                 if t[c.trip_idx].is_none(){
                     t[c.trip_idx] = Some(c_idx);
                 }
-                for f in &self.graph.stops[c.arr_stop].foothpaths{
-                    if s[f.0].is_none_or(|arr_arrival| c.arr_time + f.1 < arr_arrival){
-                        s[f.0] = Some(c.arr_time + f.1);
-                        j[f.0] = Some(JourneyMarker{c_enter: t[c.trip_idx].unwrap(), c_exit: c_idx, f_dur: f.1});
-                    }
+                if let Some(footpaths) = self.graph.footpaths.get(&c.arr_stop) {
+                    for (to, time) in footpaths {
+                        if s[*to].is_none_or(|arr_arrival| c.arr_time + time < arr_arrival){
+                            s[*to] = Some(c.arr_time + time);
+                            j[*to] = Some(JourneyMarker{c_enter: t[c.trip_idx].unwrap(), c_exit: c_idx, f_dur: *time});
+                        }
 
+                        if self.graph.stops[*to].station == target_station 
+                            && best_target_arrival.is_none_or(|best_arr| best_arr.1 > c.arr_time + time){
+                            best_target_arrival = Some((*to, c.arr_time + time));
+                        }
+                        
+                    }
                 }
             }
 
         }
-        let mut best_target: Option<(usize, Secs)> = None;
-        for stop in &self.graph.stations[target_station].stops{
-            if s[*stop].is_none(){ continue;}
-            if best_target.is_none() || best_target?.1 > s[*stop]?{
-                best_target = Some((*stop, s[*stop]?));
-            }
-        }
-        println!("{:?}", best_target);
-        self.get_journey(best_target, &j)
+
+        self.get_journey(best_target_arrival, &j)
     }
 }

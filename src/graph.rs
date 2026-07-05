@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
-use std::{collections::{HashMap, HashSet}, path::Path};
+use std::{collections::{HashMap}, path::Path};
 
-use crate::utils::Secs;
+use crate::{footpaths::{self, Footpaths}};
 
 #[derive(Debug, Deserialize)]
 struct RawShapePoint {
@@ -96,7 +96,6 @@ pub struct Stop {
     pub stop_url: String,
     pub location_type: Option<u8>,
     pub station: usize,
-    pub foothpaths: Vec<(usize, Secs)>,
     pub stop_timezone: String,
     pub wheelchair_boarding: Option<u8>,
     pub platform_code: String,
@@ -177,6 +176,7 @@ pub struct Graph {
     pub shapes: Vec<Shape>,
     pub services: Vec<String>,
     pub stations: Vec<Station>,
+    pub footpaths: Footpaths,     
 
     pub source_dir: String,
     pub stops_by_id: HashMap<String, usize>,
@@ -209,8 +209,9 @@ impl Graph {
             source_dir: dir.to_string_lossy().into_owned(),
             ..Default::default()
         };
-
-        graph.build(raw_stops, raw_routes, raw_trips, raw_stop_times, raw_shapes);
+        let footpaths = footpaths::load(&footpaths::default_path(dir))
+            .context("failed to load footpaths")?;
+        graph.build(raw_stops, raw_routes, raw_trips, raw_stop_times, raw_shapes, footpaths);
         Ok(graph)
     }
 
@@ -221,7 +222,9 @@ impl Graph {
         raw_trips: Vec<RawTrip>,
         raw_stop_times: Vec<RawStopTime>,
         raw_shape_points: Vec<RawShapePoint>,
+        footpaths: Footpaths,
     ) {
+        self.footpaths = footpaths;
         self.stops_by_id = raw_stops
             .iter()
             .enumerate()
@@ -253,7 +256,6 @@ impl Graph {
                     stop_lon: stop.stop_lon,
                     zone_id: stop.zone_id,
                     stop_url: stop.stop_url,
-                    foothpaths: Vec::new(),
                     location_type: stop.location_type,
                     stop_timezone: stop.stop_timezone,
                     wheelchair_boarding: stop.wheelchair_boarding,
@@ -263,17 +265,6 @@ impl Graph {
             .collect();
         self.stations = stations_set.into_values().collect();
         self.stations.sort_by_key(|k| k.idx);
-
-        for station in &self.stations{
-            for i in 0..station.stops.len(){
-                let i = station.stops[i];
-                self.stops[i].foothpaths.push((i, 60)); // min changeover 1 minutes
-                for j in (i+1)..station.stops.len(){
-                    let j = station.stops[j];
-                    self.stops[i].foothpaths.push((j,180)); // min stop change 3 minutes
-                }
-            }
-        }
 
         self.routes_by_id = raw_routes
             .iter()

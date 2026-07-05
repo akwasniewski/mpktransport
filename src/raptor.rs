@@ -8,7 +8,6 @@ use std::vec;
 
 pub struct Raptor<'a> {
     graph: &'a Graph,
-    footpaths: &'a Footpaths,
 }
 
 #[derive(Debug, Clone)]
@@ -26,8 +25,8 @@ enum Parent {
 }
 
 impl<'a> Raptor<'a> {
-    pub fn new(graph: &'a Graph, footpaths: &'a Footpaths) -> Self {
-        Self { graph, footpaths }
+    pub fn new(graph: &'a Graph) -> Self {
+        Self { graph}
     }
 
     fn et(&self, route: usize, stop_id: usize, tau: Secs) -> Option<usize> {
@@ -101,8 +100,11 @@ impl<'a> Raptor<'a> {
             }
 
             for from in &marked_stops.clone() {
-                if let Some(footpaths) = self.footpaths.get(from) {
+                if let Some(footpaths) = self.graph.footpaths.get(from) {
                     for (to, time) in footpaths {
+                        if to == from || *time == 30{
+                            continue;
+                        }
                         let arrival = tau[k][*from] + *time;
                         if arrival < tau[k][*to] && arrival < tau_best[*to] {
                             tau[k][*to] = arrival;

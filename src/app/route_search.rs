@@ -197,7 +197,7 @@ impl App {
 
                 let journey = match self.routing_algorithm {
                     RoutingAlgorithm::Raptor => {
-                        let mut raptor = Raptor::new(&self.graph, &self.footpaths);
+                        let mut raptor = Raptor::new(&self.graph);
                         raptor.query(from_idx, to_idx, self.time.seconds())
                     }
                     RoutingAlgorithm::Csa => {
