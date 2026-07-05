@@ -1,4 +1,4 @@
-use crate::{app::{App, RoutingAlgorithm}, csa::Csa, raptor::Raptor, utils::fmt_time};
+use crate::{app::{App, Place, RoutingAlgorithm}, csa::Csa, journey::Journey, raptor::Raptor, utils::{fmt_time, Secs}};
 
 impl App {
     pub(super) fn draw_route_search(&mut self, ui: &mut egui::Ui) {
@@ -29,27 +29,15 @@ impl App {
         }
 
         if self.route_from_focused && !self.route_from.is_empty() && self.route_from_selected.is_none() {
-            let q = self.route_from.to_lowercase();
-            // stop_id is no longer a field on Stop; search name and code only
-            let suggestions: Vec<(usize, String)> = self
-                .graph
-                .stations
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| {
-                    s.name.to_lowercase().contains(&q)
-                })
-                .take(6)
-                .map(|(i, s)| (i, s.name.clone()))
-                .collect();
+            let suggestions = self.place_suggestions(&self.route_from.clone());
 
             if !suggestions.is_empty() {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    for (idx, name) in suggestions {
+                    for (place, name) in suggestions {
                         if ui.selectable_label(false, &name).clicked() {
                             self.route_from = name;
-                            self.route_from_selected = Some(idx);
+                            self.route_from_selected = Some(place);
                             self.route_from_focused = false;
                         }
                     }
@@ -58,11 +46,11 @@ impl App {
         }
 
         // Confirmed badge
-        if let Some(idx) = self.route_from_selected {
+        if let Some(place) = self.route_from_selected {
             ui.add_space(2.0);
             ui.horizontal(|ui| {
                 ui.label(
-                    egui::RichText::new(format!("✔  {}", self.graph.stations[idx].name))
+                    egui::RichText::new(format!("✔  {}", self.place_name(place)))
                         .small()
                         .color(egui::Color32::from_rgb(80, 180, 80)),
                 );
@@ -107,26 +95,15 @@ impl App {
         }
 
         if self.route_to_focused && !self.route_to.is_empty() && self.route_to_selected.is_none() {
-            let q = self.route_to.to_lowercase();
-            let suggestions: Vec<(usize, String)> = self
-                .graph
-                .stations
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| {
-                    s.name.to_lowercase().contains(&q)
-                })
-                .take(6)
-                .map(|(i, s)| (i, s.name.clone()))
-                .collect();
+            let suggestions = self.place_suggestions(&self.route_to.clone());
 
             if !suggestions.is_empty() {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    for (idx, name) in suggestions {
+                    for (place, name) in suggestions {
                         if ui.selectable_label(false, &name).clicked() {
                             self.route_to = name;
-                            self.route_to_selected = Some(idx);
+                            self.route_to_selected = Some(place);
                             self.route_to_focused = false;
                         }
                     }
@@ -135,11 +112,11 @@ impl App {
         }
 
         // Confirmed badge
-        if let Some(idx) = self.route_to_selected {
+        if let Some(place) = self.route_to_selected {
             ui.add_space(2.0);
             ui.horizontal(|ui| {
                 ui.label(
-                    egui::RichText::new(format!("✔  {}", self.graph.stations[idx].name))
+                    egui::RichText::new(format!("✔  {}", self.place_name(place)))
                         .small()
                         .color(egui::Color32::from_rgb(80, 180, 80)),
                 );
@@ -181,22 +158,13 @@ impl App {
                 )
                 .clicked()
             {
-                let from_idx = self.route_from_selected.unwrap();
-                let to_idx = self.route_to_selected.unwrap();
+                let from = self.route_from_selected.unwrap();
+                let to = self.route_to_selected.unwrap();
                 let source_time = 8 * 3600;
 
-                let journey = match self.routing_algorithm {
-                    RoutingAlgorithm::Raptor => {
-                        let mut raptor = Raptor::new(&self.graph);
-                        raptor.query(from_idx, to_idx, source_time)
-                    }
-                    RoutingAlgorithm::Csa => {
-                        let csa = Csa::new(&self.graph);
-                        csa.query(from_idx, to_idx, source_time)
-                    }
-                };
+                let journey = self.find_route(from, to, source_time);
 
-                self.route_result = Some((from_idx, to_idx, journey));
+                self.route_result = Some((from, to, journey));
             }
         });
 
@@ -212,8 +180,8 @@ impl App {
                 });
             }
             Some((from, to, journey)) => {
-                let from_name = &self.graph.stations[*from].name;
-                let to_name   = &self.graph.stations[*to].name;
+                let from_name = self.place_name(*from);
+                let to_name   = self.place_name(*to);
 
                 ui.group(|ui| {
                     egui::Grid::new("route_header_grid")
@@ -329,6 +297,90 @@ impl App {
                 }
             }
         }
+    }
+
+    fn place_name(&self, place: Place) -> String {
+        match place {
+            Place::Station(i) => self.graph.stations[i].name.clone(),
+            Place::Bar(i) => self.bars.bars[i].name.clone(),
+        }
+    }
+
+    fn place_suggestions(&self, query: &str) -> Vec<(Place, String)> {
+        let q = query.to_lowercase();
+        let mut out: Vec<(Place, String)> = Vec::new();
+        for (i, s) in self.graph.stations.iter().enumerate() {
+            if s.name.to_lowercase().contains(&q) {
+                out.push((Place::Station(i), s.name.clone()));
+                if out.len() >= 4 {
+                    break;
+                }
+            }
+        }
+        let mut bars = 0;
+        for (i, b) in self.bars.bars.iter().enumerate() {
+            if b.name.to_lowercase().contains(&q) {
+                out.push((Place::Bar(i), format!("🍺 {}", b.name)));
+                bars += 1;
+                if bars >= 4 {
+                    break;
+                }
+            }
+        }
+        out
+    }
+
+    fn place_stops(&self, place: Place) -> Vec<(usize, Secs)> {
+        match place {
+            Place::Station(i) => self.graph.stations[i].stops.iter().map(|&s| (s, 0)).collect(),
+            Place::Bar(i) => {
+                let pid = &self.bars.bars[i].place_id;
+                self.bars.footpaths.get(pid).cloned().unwrap_or_default()
+            }
+        }
+    }
+
+    fn find_route(&self, from: Place, to: Place, depart: Secs) -> Option<Journey> {
+        let sources = self.place_stops(from);
+        let targets = self.place_stops(to);
+        if sources.is_empty() || targets.is_empty() {
+            return None;
+        }
+
+        let mut best: Option<(Journey, Secs)> = None;
+
+        match self.routing_algorithm {
+            RoutingAlgorithm::Raptor => {
+                let mut raptor = Raptor::new(&self.graph);
+                for &(s, a) in &sources {
+                    for &(t, b) in &targets {
+                        if let Some(j) = raptor.query(s, t, depart.saturating_add(a)) {
+                            let eff = j.arrival.saturating_add(b);
+                            if best.as_ref().map_or(true, |(_, be)| eff < *be) {
+                                best = Some((j, eff));
+                            }
+                        }
+                    }
+                }
+            }
+            RoutingAlgorithm::Csa => {
+                let csa = Csa::new(&self.graph);
+                for &(s, a) in &sources {
+                    let fs = self.graph.stops[s].station;
+                    for &(t, b) in &targets {
+                        let ts = self.graph.stops[t].station;
+                        if let Some(j) = csa.query(fs, ts, depart.saturating_add(a)) {
+                            let eff = j.arrival.saturating_add(b);
+                            if best.as_ref().map_or(true, |(_, be)| eff < *be) {
+                                best = Some((j, eff));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        best.map(|(j, _)| j)
     }
 
     pub fn get_active_route_shapes(&self) -> Vec<Vec<(f64, f64)>> {

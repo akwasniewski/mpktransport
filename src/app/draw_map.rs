@@ -1,7 +1,7 @@
 use egui::{Color32, Stroke};
 use walkers::{Map, lat_lon};
 
-use crate::app::{App, MarkerId, shapes_plugin::ShapeLinesPlugin, stop_plugin::StopPlugin};
+use crate::app::{App, MarkerId, Place, shapes_plugin::ShapeLinesPlugin, stop_plugin::StopPlugin};
 
 impl App {
     pub(super) fn draw_map(&mut self, ui: &mut egui::Ui) {
@@ -39,10 +39,21 @@ impl App {
 
         let clicked_cell = std::rc::Rc::new(std::cell::Cell::new(Option::<MarkerId>::None));
         let clicked_cell2 = clicked_cell.clone();
-        let highlighted: std::collections::HashSet<MarkerId> = match self.route_result {
-            Some((a, b, _)) => [MarkerId::Stop(a), MarkerId::Stop(b)].into(),
-            None => std::collections::HashSet::new(),
-        };
+        let mut highlighted: std::collections::HashSet<MarkerId> = std::collections::HashSet::new();
+        if let Some((a, b, _)) = self.route_result {
+            for p in [a, b] {
+                match p {
+                    Place::Station(i) => {
+                        for &s in &self.graph.stations[i].stops {
+                            highlighted.insert(MarkerId::Stop(s));
+                        }
+                    }
+                    Place::Bar(i) => {
+                        highlighted.insert(MarkerId::Bar(i));
+                    }
+                }
+            }
+        }
 
         let stop_plugin = StopPlugin {
             stops: stops_data,
