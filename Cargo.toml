@@ -12,3 +12,7 @@ egui = "0.34.3"
 egui_extras = "0.34.3"
 serde = {version="1.0.228", features=["derive"]}
 walkers = "0.53.0"
+transport = {
+    git = "https://github.com/akwasniewski/transport",
+    branch = "main"  
+}

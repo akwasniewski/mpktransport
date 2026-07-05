@@ -1,4 +1,4 @@
-use crate::{app::{App, RoutingAlgorithm}, csa::Csa, raptor::Raptor, utils::fmt_time};
+use crate::{app::{App, RoutingAlgorithm, Time}, csa::Csa, raptor::Raptor, utils::fmt_time};
 
 impl App {
     pub(super) fn draw_route_search(&mut self, ui: &mut egui::Ui) {
@@ -154,6 +154,17 @@ impl App {
         ui.separator();
         ui.add_space(12.0);
 
+        // ── Time picker ──────────────────────────────────────────────────
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("Depart at:").weak());
+            time_picker(ui, &mut self.time.hour, &mut self.time.minute);
+        });
+
+        ui.add_space(20.0);
+        ui.separator();
+        ui.add_space(12.0);
+
         // ── Search button ────────────────────────────────────────────────
         ui.add_space(8.0);
         ui.horizontal(|ui| {
@@ -183,16 +194,15 @@ impl App {
             {
                 let from_idx = self.route_from_selected.unwrap();
                 let to_idx = self.route_to_selected.unwrap();
-                let source_time = 8 * 3600;
 
                 let journey = match self.routing_algorithm {
                     RoutingAlgorithm::Raptor => {
-                        let mut raptor = Raptor::new(&self.graph);
-                        raptor.query(from_idx, to_idx, source_time)
+                        let mut raptor = Raptor::new(&self.graph, &self.footpaths);
+                        raptor.query(from_idx, to_idx, self.time.seconds())
                     }
                     RoutingAlgorithm::Csa => {
                         let csa = Csa::new(&self.graph);
-                        csa.query(from_idx, to_idx, source_time)
+                        csa.query(from_idx, to_idx, self.time.seconds())
                     }
                 };
 
@@ -259,7 +269,7 @@ impl App {
                                         ui.group(|ui| {
                                             ui.set_width(ui.available_width());
                                             ui.horizontal(|ui| {
-                                                let walk_badge = egui::RichText::new(" 🚶 Walk ")
+                                                let walk_badge = egui::RichText::new("🧍 Wait ")
                                                     .background_color(ui.visuals().widgets.inactive.bg_fill)
                                                     .color(ui.visuals().widgets.active.text_color())
                                                     .strong();
@@ -272,6 +282,29 @@ impl App {
                                             ui.add_space(2.0);
                                             ui.horizontal(|ui| {
                                                 ui.label(egui::RichText::new(format!("  {} → {}", fmt_time(start_leg.time), fmt_time(end_leg.time))).monospace().weak().small());
+                                            });
+                                        });
+                                    } else if start_leg.is_walk {
+                                        ui.group(|ui| {
+                                            ui.set_width(ui.available_width());
+                                            ui.horizontal(|ui| {
+                                                let walk_badge = egui::RichText::new(" 🚶 Walk ")
+                                                    .background_color(ui.visuals().widgets.inactive.bg_fill)
+                                                    .color(ui.visuals().widgets.active.text_color())
+                                                    .strong();
+                                                ui.label(walk_badge);
+                                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                    ui.label(egui::RichText::new(format!("{} min", duration_mins)).weak().small());
+                                                });
+                                            });
+                                            ui.add_space(4.0);
+                                            ui.horizontal(|ui| {
+                                                ui.label(egui::RichText::new(format!("• {}", fmt_time(start_leg.time))).monospace().weak());
+                                                ui.label(&start_leg.stop_name);
+                                            });
+                                            ui.horizontal(|ui| {
+                                                ui.label(egui::RichText::new(format!("• {}", fmt_time(end_leg.time))).monospace().weak());
+                                                ui.label(&end_leg.stop_name);
                                             });
                                         });
                                     } else {
@@ -367,6 +400,35 @@ impl App {
         }
         paths
     }
+}
+
+pub fn time_picker(ui: &mut egui::Ui, hour: &mut u32, minute: &mut u32) {
+    ui.horizontal(|ui| {
+        // Hour Dropdown (24-hour format)
+        let hour_res = egui::ComboBox::from_id_source("hour_picker")
+            .selected_text(format!("{:02}", hour))
+            .width(50.0)
+            .show_ui(ui, |ui| {
+                for h in 0..24 {
+                    ui.selectable_value(hour, h, format!("{:02}", h));
+                }
+            });
+
+        ui.label(":");
+
+        // Minute Dropdown
+        let minute_res = egui::ComboBox::from_id_source("minute_picker")
+            .selected_text(format!("{:02}", minute))
+            .width(50.0)
+            .show_ui(ui, |ui| {
+                for m in 0..60 {
+                    ui.selectable_value(minute, m, format!("{:02}", m));
+                }
+            });
+
+        // Combine responses so the caller can check for changes
+        hour_res.response.union(minute_res.response)
+    });
 }
 
 fn trim_shape_to_stops(

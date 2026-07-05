@@ -1,4 +1,5 @@
 pub mod graph;
+pub mod footpaths;
 pub mod raptor;
 pub mod csa;
 pub mod journey;

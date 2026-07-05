@@ -1,10 +1,13 @@
 use walkers::{lat_lon, MapMemory, Plugin, Projector};
 
+use crate::app::map_style;
+
 pub(super) struct StopPlugin {
     pub(super) stops: Vec<(f64, f64, String, usize, bool)>,
     pub(super) pointer: Option<egui::Pos2>,
     pub(super) clicked_out: std::rc::Rc<std::cell::Cell<Option<usize>>>,
-    pub(super) highlighted: std::collections::HashSet<usize>,  // ← add this
+    pub(super) endpoint_stops: std::collections::HashSet<usize>,
+    pub(super) transfer_stops: std::collections::HashSet<usize>,
 }
 
 impl Plugin for StopPlugin {
@@ -30,23 +33,39 @@ impl Plugin for StopPlugin {
                 continue;
             }
 
-            let is_highlighted = self.highlighted.contains(idx);
+            let is_endpoint = self.endpoint_stops.contains(idx);
+            let is_transfer = self.transfer_stops.contains(idx);
 
-            let radius = if *is_sel || is_highlighted { 8.0_f32 } else { 5.5_f32 };
+            let radius = if *is_sel || is_endpoint {
+                8.0_f32
+            } else if is_transfer {
+                7.0_f32
+            } else {
+                5.5_f32
+            };
             let dist   = self.pointer.map_or(f32::MAX, |p| p.distance(screen_pt));
             let hovered = dist < radius + 5.0;
 
-            let fill = if is_highlighted {
-                egui::Color32::from_rgb(255, 100, 0)   // orange — route endpoint
+            let fill = if is_endpoint {
+                map_style::endpoint_fill()
+            } else if is_transfer {
+                map_style::transfer_fill()
             } else if *is_sel {
-                egui::Color32::from_rgb(255, 180, 0)   // amber — selected
+                map_style::selected_fill()
             } else if hovered {
-                egui::Color32::from_rgb(90, 200, 255)  // light blue — hovered
+                map_style::hovered_fill()
             } else {
-                egui::Color32::from_rgb(30, 120, 220)  // blue — default
+                map_style::default_stop_fill()
             };
 
             painter.circle(screen_pt, radius, fill, egui::Stroke::new(1.5, egui::Color32::WHITE));
+            if is_transfer {
+                painter.circle_stroke(
+                    screen_pt,
+                    radius + 3.0,
+                    egui::Stroke::new(2.0, map_style::transfer_ring()),
+                );
+            }
 
             if hovered {
                 // Draw tooltip above the circle
@@ -75,5 +94,3 @@ impl Plugin for StopPlugin {
         }
     }
 }
-
-
