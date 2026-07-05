@@ -224,6 +224,12 @@ impl App {
                         egui::ScrollArea::vertical()
                             .id_salt("journey_legs_scroll")
                             .show(ui, |ui| {
+                                if let Some((bar_name, stop_name, walk)) =
+                                    j.legs.first().and_then(|l| self.bar_walk(*from, l.stop_idx))
+                                {
+                                    bar_walk_row(ui, &bar_name, &stop_name, walk, true);
+                                }
+
                                 let legs = &j.legs;
                                 let n = legs.len();
 
@@ -417,6 +423,12 @@ impl App {
                                         }
                                     }
                                 }
+
+                                if let Some((bar_name, stop_name, walk)) =
+                                    j.legs.last().and_then(|l| self.bar_walk(*to, l.stop_idx))
+                                {
+                                    bar_walk_row(ui, &bar_name, &stop_name, walk, false);
+                                }
                             });
                     }
                     None => {
@@ -435,6 +447,28 @@ impl App {
             Place::Station(i) => self.graph.stations[i].name.clone(),
             Place::Bar(i) => self.bars.bars[i].name.clone(),
         }
+    }
+
+    fn bar_walk(&self, place: Place, stop_idx: usize) -> Option<(String, String, Secs)> {
+        let Place::Bar(i) = place else {
+            return None;
+        };
+        let bar = self.bars.bars.get(i)?;
+        let fps = self.bars.footpaths.get(&bar.place_id)?;
+        let stop = self.graph.stops.get(stop_idx)?;
+        let station = stop.station;
+        let walk = fps
+            .iter()
+            .find(|(s, _)| *s == stop_idx)
+            .map(|(_, w)| *w)
+            .or_else(|| {
+                fps.iter()
+                    .filter(|(s, _)| self.graph.stops[*s].station == station)
+                    .map(|(_, w)| *w)
+                    .min()
+            })
+            .or_else(|| fps.iter().map(|(_, w)| *w).min())?;
+        Some((bar.name.clone(), stop.name.clone(), walk))
     }
 
     fn place_suggestions(&self, query: &str) -> Vec<(Place, String)> {
@@ -552,6 +586,28 @@ impl App {
         }
         paths
     }
+}
+
+fn bar_walk_row(ui: &mut egui::Ui, bar_name: &str, stop_name: &str, walk: Secs, from_bar: bool) {
+    ui.group(|ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal(|ui| {
+            let walk_badge = egui::RichText::new(" 🚶 Walk ")
+                .background_color(ui.visuals().widgets.inactive.bg_fill)
+                .color(ui.visuals().widgets.active.text_color())
+                .strong();
+            ui.label(walk_badge);
+            let label = if from_bar {
+                format!("{bar_name} → {stop_name}")
+            } else {
+                format!("{stop_name} → {bar_name}")
+            };
+            ui.label(egui::RichText::new(label).strong());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(egui::RichText::new(format!("{} min", walk / 60)).weak().small());
+            });
+        });
+    });
 }
 
 pub fn time_picker(ui: &mut egui::Ui, hour: &mut u32, minute: &mut u32) {
