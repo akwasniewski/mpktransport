@@ -1,4 +1,4 @@
-use crate::{app::{App, RoutingAlgorithm, Time}, csa::Csa, raptor::Raptor, utils::fmt_time};
+use crate::{app::{App, RoutingAlgorithm}, csa::Csa, raptor::Raptor, utils::fmt_time};
 
 impl App {
     pub(super) fn draw_route_search(&mut self, ui: &mut egui::Ui) {
@@ -254,7 +254,7 @@ impl App {
                         ui.add_space(5.0);
 
                         egui::ScrollArea::vertical()
-                            .id_source("journey_legs_scroll")
+                            .id_salt("journey_legs_scroll")
                             .show(ui, |ui| {
                                 let legs = &j.legs;
                                 let n = legs.len();
@@ -503,7 +503,7 @@ impl App {
 pub fn time_picker(ui: &mut egui::Ui, hour: &mut u32, minute: &mut u32) {
     ui.horizontal(|ui| {
         // Hour Dropdown (24-hour format)
-        let hour_res = egui::ComboBox::from_id_source("hour_picker")
+        let hour_res = egui::ComboBox::from_id_salt("hour_picker")
             .selected_text(format!("{:02}", hour))
             .width(50.0)
             .show_ui(ui, |ui| {
@@ -515,7 +515,7 @@ pub fn time_picker(ui: &mut egui::Ui, hour: &mut u32, minute: &mut u32) {
         ui.label(":");
 
         // Minute Dropdown
-        let minute_res = egui::ComboBox::from_id_source("minute_picker")
+        let minute_res = egui::ComboBox::from_id_salt("minute_picker")
             .selected_text(format!("{:02}", minute))
             .width(50.0)
             .show_ui(ui, |ui| {

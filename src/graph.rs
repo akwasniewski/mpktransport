@@ -11,6 +11,7 @@ struct RawShapePoint {
     shape_pt_lon: f64,
     shape_pt_sequence: u32,
     #[serde(default)]
+    #[allow(dead_code)]
     shape_dist_traveled: Option<f64>,
 }
 
@@ -34,6 +35,7 @@ struct RawStop {
     #[serde(default)]
     location_type: Option<u8>,
     #[serde(default)]
+    #[allow(dead_code)]
     parent_station: String,
     #[serde(default)]
     stop_timezone: String,
@@ -236,7 +238,7 @@ impl Graph {
             .into_iter()
             .enumerate()
             .map(|(idx, stop)| {
-                let mut station_idx = 0;
+                let station_idx;
                 if let Some(cur_station) = stations_set.get_mut(&stop.stop_name){
                     cur_station.stops.push(idx);
                     station_idx = cur_station.idx;

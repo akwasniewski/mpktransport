@@ -7,7 +7,7 @@ pub mod route_search;
 
 use walkers::{HttpTiles, MapMemory, lat_lon};
 
-use crate::{footpaths::Footpaths, graph::Graph, journey::Journey};
+use crate::{graph::Graph, journey::Journey};
 
 #[derive(PartialEq)]
 pub(super) enum Tab { Map, Routes }
@@ -32,7 +32,6 @@ impl Time {
 
 pub struct App {
     pub(super) graph: Graph,
-    pub(super) footpaths: Footpaths,
     pub(super) filter: String,
     pub(super) selected: Option<usize>,
     pub(super) selected_stop_lines: Vec<String>,
@@ -52,7 +51,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(graph: Graph, footpaths: Footpaths, ctx: egui::Context) -> Self {
+    pub fn new(graph: Graph, ctx: egui::Context) -> Self {
         let centre = graph.centre().unwrap_or((50.06, 19.94));
         let tiles = HttpTiles::new(walkers::sources::OpenStreetMap, ctx);
         let mut map_memory = MapMemory::default();
@@ -63,7 +62,6 @@ impl App {
 
         Self {
             graph,
-            footpaths,
             filter: String::new(),
             selected: None,
             selected_stop_lines: Vec::new(),

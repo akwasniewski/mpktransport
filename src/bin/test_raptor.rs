@@ -1,8 +1,6 @@
 use anyhow::{Context, Result};
 use mpktransport::utils::{fmt_time, Secs};
 use std::path::Path;
-
-use mpktransport::footpaths;
 use mpktransport::graph::Graph;
 use mpktransport::raptor::Raptor;
 

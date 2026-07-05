@@ -1,6 +1,4 @@
-use std::cmp::{Reverse, min};
-
-use crate::{graph::{Connection, Graph}, journey::{Journey, Leg}, utils::Secs};
+use crate::{graph::{Graph}, journey::{Journey, Leg}, utils::Secs};
 pub struct Csa<'a> {
     graph: &'a Graph,
 }

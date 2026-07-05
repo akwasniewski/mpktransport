@@ -1,4 +1,3 @@
-use crate::footpaths::Footpaths;
 use crate::graph::Graph;
 use crate::journey::{Journey, Leg};
 use crate::utils::Secs;
@@ -52,7 +51,7 @@ impl<'a> Raptor<'a> {
         let mut tau_best: Vec<Secs> = vec![Secs::MAX; self.graph.stops.len()];
         let mut parent: Vec<Option<Parent>> = vec![None; self.graph.stops.len()];
 
-        let mut Q: HashMap<usize, usize> = HashMap::new();
+        let mut q: HashMap<usize, usize> = HashMap::new();
         let mut marked_stops: HashSet<usize> = HashSet::new();
 
         for stop in from_stops {
@@ -61,18 +60,18 @@ impl<'a> Raptor<'a> {
         }
 
         for k in 1..max_transfers+1 {
-            Q.clear();
+            q.clear();
             for p in &marked_stops {
                 for (r, p_idx) in &self.graph.rroutes_by_stop[*p] {
-                    let p1_idx = Q.get(r).unwrap_or(&usize::MAX);
+                    let p1_idx = q.get(r).unwrap_or(&usize::MAX);
                     if *p_idx < *p1_idx {
-                        Q.insert(*r, *p_idx);
+                        q.insert(*r, *p_idx);
                     }
                 }
             }
             marked_stops.clear();
 
-            for (r, p_idx) in &Q {
+            for (r, p_idx) in &q {
                 let mut t: Option<(usize, usize)> = None;
 
                 let route_stops = &self.graph.raptor_routes[*r].stops;

@@ -1,7 +1,7 @@
 use std::{env, path::Path};
 
 use anyhow::{Context, Result};
-use mpktransport::{app::App, footpaths::{self, Footpaths}, graph::Graph};
+use mpktransport::{app::App, graph::Graph};
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
@@ -20,15 +20,6 @@ fn main() -> Result<()> {
     let graph = Graph::load(dir).context("Failed to load GTFS")?;
     println!("  stops loaded: {}", graph.stops.len());
 
-    let footpaths_path = footpaths::default_path(dir);
-    let footpaths = footpaths::load(&footpaths_path).unwrap_or_else(|err| {
-        eprintln!(
-            "Warning: failed to load footpaths from '{}': {err}. Continuing without footpaths.",
-            footpaths_path.display()
-        );
-        Footpaths::new()
-    });
-
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("GTFS Viewer")
@@ -40,7 +31,7 @@ fn main() -> Result<()> {
     eframe::run_native(
         "GTFS Viewer",
         options,
-        Box::new(|cc| Ok(Box::new(App::new(graph, footpaths, cc.egui_ctx.clone())))),
+        Box::new(|cc| Ok(Box::new(App::new(graph, cc.egui_ctx.clone())))),
     )
     .map_err(|e| anyhow::anyhow!("eframe error: {e}"))?;
 
