@@ -2,7 +2,7 @@ use egui::Stroke;
 use std::collections::HashSet;
 use walkers::{Map, lat_lon};
 
-use crate::app::{map_style, App, MarkerId, shapes_plugin::ShapeLinesPlugin, stop_plugin::StopPlugin};
+use crate::app::{map_style, App, MarkerId, Place, shapes_plugin::ShapeLinesPlugin, stop_plugin::StopPlugin};
 
 impl App {
     pub(super) fn draw_map(&mut self, ui: &mut egui::Ui) {
@@ -105,11 +105,21 @@ impl App {
                 }
             }
         } else {
-            if let Some(station) = self.graph.stations.get(*from_station) {
-                endpoint_stops.extend(station.stops.iter().copied());
-            }
-            if let Some(station) = self.graph.stations.get(*to_station) {
-                endpoint_stops.extend(station.stops.iter().copied());
+            for place in [from_station, to_station] {
+                match place {
+                    Place::Station(i) => {
+                        if let Some(station) = self.graph.stations.get(*i) {
+                            endpoint_stops.extend(station.stops.iter().copied());
+                        }
+                    }
+                    Place::Bar(i) => {
+                        if let Some(bar) = self.bars.bars.get(*i) {
+                            if let Some(fps) = self.bars.footpaths.get(&bar.place_id) {
+                                endpoint_stops.extend(fps.iter().map(|(s, _)| *s));
+                            }
+                        }
+                    }
+                }
             }
         }
 

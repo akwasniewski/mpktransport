@@ -20,7 +20,8 @@ fn main() -> Result<()> {
     let graph = Graph::load(dir).context("Failed to load GTFS")?;
     println!("  stops loaded: {}", graph.stops.len());
 
-    let bars = BarsStops::load(Path::new("bars_stops.csv"), &graph).unwrap_or_else(|e| {
+    let bars_stops_path = dir.join("bars_stops.csv");
+    let bars = BarsStops::load(&bars_stops_path, &graph).unwrap_or_else(|e| {
         eprintln!("Warning: could not load bars_stops.csv: {e}");
         BarsStops::empty()
     });

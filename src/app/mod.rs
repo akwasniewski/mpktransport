@@ -36,6 +36,12 @@ pub enum MarkerId {
     Bar(usize),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Place {
+    Station(usize),
+    Bar(usize),
+}
+
 pub struct App {
     pub(super) graph: Graph,
     pub(super) bars: BarsStops,
@@ -49,11 +55,11 @@ pub struct App {
     pub(super) route_from: String,
     pub(super) route_to: String,
     pub(super) time: Time,
-    pub(super) route_from_selected: Option<usize>,
-    pub(super) route_to_selected: Option<usize>,
+    pub(super) route_from_selected: Option<Place>,
+    pub(super) route_to_selected: Option<Place>,
     pub(super) route_from_focused: bool,
     pub(super) route_to_focused: bool,
-    pub(super) route_result: Option<(usize, usize, Option<Journey>)>,
+    pub(super) route_result: Option<(Place, Place, Option<Journey>)>,
     pub(super) routing_algorithm: RoutingAlgorithm,
 }
 
