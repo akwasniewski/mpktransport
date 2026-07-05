@@ -1,4 +1,4 @@
-use crate::{app::{App, RoutingAlgorithm}, csa::Csa, raptor::Raptor, utils::fmt_time};
+use crate::{app::{App, Place, RoutingAlgorithm}, csa::Csa, journey::Journey, raptor::Raptor, utils::{fmt_time, Secs}};
 
 impl App {
     pub(super) fn draw_route_search(&mut self, ui: &mut egui::Ui) {
@@ -29,27 +29,15 @@ impl App {
         }
 
         if self.route_from_focused && !self.route_from.is_empty() && self.route_from_selected.is_none() {
-            let q = self.route_from.to_lowercase();
-            // stop_id is no longer a field on Stop; search name and code only
-            let suggestions: Vec<(usize, String)> = self
-                .graph
-                .stations
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| {
-                    s.name.to_lowercase().contains(&q)
-                })
-                .take(6)
-                .map(|(i, s)| (i, s.name.clone()))
-                .collect();
+            let suggestions = self.place_suggestions(&self.route_from.clone());
 
             if !suggestions.is_empty() {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    for (idx, name) in suggestions {
+                    for (place, name) in suggestions {
                         if ui.selectable_label(false, &name).clicked() {
                             self.route_from = name;
-                            self.route_from_selected = Some(idx);
+                            self.route_from_selected = Some(place);
                             self.route_from_focused = false;
                         }
                     }
@@ -58,11 +46,11 @@ impl App {
         }
 
         // Confirmed badge
-        if let Some(idx) = self.route_from_selected {
+        if let Some(place) = self.route_from_selected {
             ui.add_space(2.0);
             ui.horizontal(|ui| {
                 ui.label(
-                    egui::RichText::new(format!("✔  {}", self.graph.stations[idx].name))
+                    egui::RichText::new(format!("✔  {}", self.place_name(place)))
                         .small()
                         .color(egui::Color32::from_rgb(80, 180, 80)),
                 );
@@ -107,26 +95,15 @@ impl App {
         }
 
         if self.route_to_focused && !self.route_to.is_empty() && self.route_to_selected.is_none() {
-            let q = self.route_to.to_lowercase();
-            let suggestions: Vec<(usize, String)> = self
-                .graph
-                .stations
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| {
-                    s.name.to_lowercase().contains(&q)
-                })
-                .take(6)
-                .map(|(i, s)| (i, s.name.clone()))
-                .collect();
+            let suggestions = self.place_suggestions(&self.route_to.clone());
 
             if !suggestions.is_empty() {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    for (idx, name) in suggestions {
+                    for (place, name) in suggestions {
                         if ui.selectable_label(false, &name).clicked() {
                             self.route_to = name;
-                            self.route_to_selected = Some(idx);
+                            self.route_to_selected = Some(place);
                             self.route_to_focused = false;
                         }
                     }
@@ -135,11 +112,11 @@ impl App {
         }
 
         // Confirmed badge
-        if let Some(idx) = self.route_to_selected {
+        if let Some(place) = self.route_to_selected {
             ui.add_space(2.0);
             ui.horizontal(|ui| {
                 ui.label(
-                    egui::RichText::new(format!("✔  {}", self.graph.stations[idx].name))
+                    egui::RichText::new(format!("✔  {}", self.place_name(place)))
                         .small()
                         .color(egui::Color32::from_rgb(80, 180, 80)),
                 );
@@ -192,21 +169,12 @@ impl App {
                 )
                 .clicked()
             {
-                let from_idx = self.route_from_selected.unwrap();
-                let to_idx = self.route_to_selected.unwrap();
+                let from = self.route_from_selected.unwrap();
+                let to = self.route_to_selected.unwrap();
 
-                let journey = match self.routing_algorithm {
-                    RoutingAlgorithm::Raptor => {
-                        let mut raptor = Raptor::new(&self.graph);
-                        raptor.query(from_idx, to_idx, self.time.seconds())
-                    }
-                    RoutingAlgorithm::Csa => {
-                        let csa = Csa::new(&self.graph);
-                        csa.query(from_idx, to_idx, self.time.seconds())
-                    }
-                };
+                let journey = self.find_route(from, to, self.time.seconds());
 
-                self.route_result = Some((from_idx, to_idx, journey));
+                self.route_result = Some((from, to, journey));
             }
         });
 
@@ -222,8 +190,8 @@ impl App {
                 });
             }
             Some((from, to, journey)) => {
-                let from_name = &self.graph.stations[*from].name;
-                let to_name   = &self.graph.stations[*to].name;
+                let from_name = self.place_name(*from);
+                let to_name   = self.place_name(*to);
 
                 ui.group(|ui| {
                     egui::Grid::new("route_header_grid")
@@ -256,6 +224,12 @@ impl App {
                         egui::ScrollArea::vertical()
                             .id_salt("journey_legs_scroll")
                             .show(ui, |ui| {
+                                if let Some((bar_name, stop_name, walk)) =
+                                    j.legs.first().and_then(|l| self.bar_walk(*from, l.stop_idx))
+                                {
+                                    bar_walk_row(ui, &bar_name, &stop_name, walk, true);
+                                }
+
                                 let legs = &j.legs;
                                 let n = legs.len();
 
@@ -449,6 +423,12 @@ impl App {
                                         }
                                     }
                                 }
+
+                                if let Some((bar_name, stop_name, walk)) =
+                                    j.legs.last().and_then(|l| self.bar_walk(*to, l.stop_idx))
+                                {
+                                    bar_walk_row(ui, &bar_name, &stop_name, walk, false);
+                                }
                             });
                     }
                     None => {
@@ -460,6 +440,114 @@ impl App {
                 }
             }
         }
+    }
+
+    fn place_name(&self, place: Place) -> String {
+        match place {
+            Place::Station(i) => self.graph.stations[i].name.clone(),
+            Place::Bar(i) => self.bars.bars[i].name.clone(),
+        }
+    }
+
+    fn bar_walk(&self, place: Place, stop_idx: usize) -> Option<(String, String, Secs)> {
+        let Place::Bar(i) = place else {
+            return None;
+        };
+        let bar = self.bars.bars.get(i)?;
+        let fps = self.bars.footpaths.get(&bar.place_id)?;
+        let stop = self.graph.stops.get(stop_idx)?;
+        let station = stop.station;
+        let walk = fps
+            .iter()
+            .find(|(s, _)| *s == stop_idx)
+            .map(|(_, w)| *w)
+            .or_else(|| {
+                fps.iter()
+                    .filter(|(s, _)| self.graph.stops[*s].station == station)
+                    .map(|(_, w)| *w)
+                    .min()
+            })
+            .or_else(|| fps.iter().map(|(_, w)| *w).min())?;
+        Some((bar.name.clone(), stop.name.clone(), walk))
+    }
+
+    fn place_suggestions(&self, query: &str) -> Vec<(Place, String)> {
+        let q = query.to_lowercase();
+        let mut out: Vec<(Place, String)> = Vec::new();
+        for (i, s) in self.graph.stations.iter().enumerate() {
+            if s.name.to_lowercase().contains(&q) {
+                out.push((Place::Station(i), s.name.clone()));
+                if out.len() >= 4 {
+                    break;
+                }
+            }
+        }
+        let mut bars = 0;
+        for (i, b) in self.bars.bars.iter().enumerate() {
+            if b.name.to_lowercase().contains(&q) {
+                out.push((Place::Bar(i), format!("🍺 {}", b.name)));
+                bars += 1;
+                if bars >= 4 {
+                    break;
+                }
+            }
+        }
+        out
+    }
+
+    fn place_stops(&self, place: Place) -> Vec<(usize, Secs)> {
+        match place {
+            Place::Station(i) => self.graph.stations[i].stops.iter().map(|&s| (s, 0)).collect(),
+            Place::Bar(i) => {
+                let pid = &self.bars.bars[i].place_id;
+                self.bars.footpaths.get(pid).cloned().unwrap_or_default()
+            }
+        }
+    }
+
+    fn find_route(&self, from: Place, to: Place, depart: Secs) -> Option<Journey> {
+        let sources = self.place_stops(from);
+        let targets = self.place_stops(to);
+        if sources.is_empty() || targets.is_empty() {
+            return None;
+        }
+
+        let mut best: Option<(Journey, Secs)> = None;
+
+        match self.routing_algorithm {
+            RoutingAlgorithm::Raptor => {
+                let mut raptor = Raptor::new(&self.graph);
+                for &(s, a) in &sources {
+                    let fs = self.graph.stops[s].station;
+                    for &(t, b) in &targets {
+                        let ts = self.graph.stops[t].station;
+                        if let Some(j) = raptor.query(fs, ts, depart.saturating_add(a)) {
+                            let eff = j.arrival.saturating_add(b);
+                            if best.as_ref().map_or(true, |(_, be)| eff < *be) {
+                                best = Some((j, eff));
+                            }
+                        }
+                    }
+                }
+            }
+            RoutingAlgorithm::Csa => {
+                let csa = Csa::new(&self.graph);
+                for &(s, a) in &sources {
+                    let fs = self.graph.stops[s].station;
+                    for &(t, b) in &targets {
+                        let ts = self.graph.stops[t].station;
+                        if let Some(j) = csa.query(fs, ts, depart.saturating_add(a)) {
+                            let eff = j.arrival.saturating_add(b);
+                            if best.as_ref().map_or(true, |(_, be)| eff < *be) {
+                                best = Some((j, eff));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        best.map(|(j, _)| j)
     }
 
     pub fn get_active_route_shapes(&self) -> Vec<Vec<(f64, f64)>> {
@@ -498,6 +586,28 @@ impl App {
         }
         paths
     }
+}
+
+fn bar_walk_row(ui: &mut egui::Ui, bar_name: &str, stop_name: &str, walk: Secs, from_bar: bool) {
+    ui.group(|ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal(|ui| {
+            let walk_badge = egui::RichText::new(" 🚶 Walk ")
+                .background_color(ui.visuals().widgets.inactive.bg_fill)
+                .color(ui.visuals().widgets.active.text_color())
+                .strong();
+            ui.label(walk_badge);
+            let label = if from_bar {
+                format!("{bar_name} → {stop_name}")
+            } else {
+                format!("{stop_name} → {bar_name}")
+            };
+            ui.label(egui::RichText::new(label).strong());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(egui::RichText::new(format!("{} min", walk / 60)).weak().small());
+            });
+        });
+    });
 }
 
 pub fn time_picker(ui: &mut egui::Ui, hour: &mut u32, minute: &mut u32) {

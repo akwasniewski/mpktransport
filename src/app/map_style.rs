@@ -46,6 +46,10 @@ pub(super) fn default_stop_fill() -> Color32 {
     Color32::from_rgb(30, 120, 220)
 }
 
+pub(super) fn bar_fill() -> Color32 {
+    Color32::from_rgb(233, 30, 99)
+}
+
 fn gradient_t(idx: usize, total: usize) -> f32 {
     if total <= 1 {
         0.0

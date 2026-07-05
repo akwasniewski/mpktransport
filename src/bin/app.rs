@@ -1,7 +1,7 @@
 use std::{env, path::Path};
 
 use anyhow::{Context, Result};
-use mpktransport::{app::App, graph::Graph};
+use mpktransport::{app::App, bar_stops_graph::BarsStops, graph::Graph};
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
@@ -20,6 +20,13 @@ fn main() -> Result<()> {
     let graph = Graph::load(dir).context("Failed to load GTFS")?;
     println!("  stops loaded: {}", graph.stops.len());
 
+    let bars_stops_path = dir.join("bars_stops.csv");
+    let bars = BarsStops::load(&bars_stops_path, &graph).unwrap_or_else(|e| {
+        eprintln!("Warning: could not load bars_stops.csv: {e}");
+        BarsStops::empty()
+    });
+    println!("  bars loaded: {}", bars.bars.len());
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("GTFS Viewer")
@@ -31,7 +38,7 @@ fn main() -> Result<()> {
     eframe::run_native(
         "GTFS Viewer",
         options,
-        Box::new(|cc| Ok(Box::new(App::new(graph, cc.egui_ctx.clone())))),
+        Box::new(|cc| Ok(Box::new(App::new(graph, bars, cc.egui_ctx.clone())))),
     )
     .map_err(|e| anyhow::anyhow!("eframe error: {e}"))?;
 
